@@ -30,7 +30,12 @@ export const env = {
 
   googleBooksApiKey: () => process.env.GOOGLE_BOOKS_API_KEY,
 
-  storageDriver: (): "local" | "s3" => (process.env.STORAGE_DRIVER === "s3" ? "s3" : "local"),
+  /** STORAGE_DRIVER l'emporte ; sinon Vercel Blob dès que Vercel fournit BLOB_READ_WRITE_TOKEN, sinon disque local. */
+  storageDriver: (): "local" | "s3" | "blob" => {
+    const d = process.env.STORAGE_DRIVER;
+    if (d === "s3" || d === "blob" || d === "local") return d;
+    return process.env.BLOB_READ_WRITE_TOKEN ? "blob" : "local";
+  },
   localUploadDir: () => process.env.LOCAL_UPLOAD_DIR || "./uploads",
   s3: () => ({
     bucket: process.env.S3_BUCKET || "",
