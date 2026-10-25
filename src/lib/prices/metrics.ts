@@ -3,6 +3,7 @@ import type { PriceStats } from "./stats";
 import type { OfferType } from "./types";
 
 export interface SalePoint {
+  platform?: string;
   offerType: OfferType;
   priceCents: number;
   observedAt: Date | string;
@@ -11,6 +12,7 @@ export interface SalePoint {
 export interface SaleRow {
   priceCents: number;
   soldAt: string;
+  platform?: string;
 }
 
 export interface BookMetrics {
@@ -19,6 +21,8 @@ export interface BookMetrics {
   sales30d: number | null;
   /** Les 5 ventes les plus récentes, de la plus récente à la plus ancienne. */
   lastSales: SaleRow[];
+  /** Toutes les ventes des 12 derniers mois (historique), de la plus récente à la plus ancienne. */
+  sales: SaleRow[];
   /** Profit net × probabilité de vendre dans les 30 jours (plafonnée à 1). */
   weightedProfit30dCents: number | null;
   /** Prix médian d'occasion ÷ prix éditeur. */
@@ -38,7 +42,7 @@ export function computeMetrics(
 ): BookMetrics {
   const sold = points
     .filter((p) => p.offerType === "SOLD")
-    .map((p) => ({ priceCents: p.priceCents, soldAt: new Date(p.observedAt) }))
+    .map((p) => ({ priceCents: p.priceCents, soldAt: new Date(p.observedAt), platform: p.platform }))
     .filter((p) => now.getTime() - p.soldAt.getTime() <= 365 * DAY)
     .sort((a, b) => b.soldAt.getTime() - a.soldAt.getTime());
   const recorded30d = sold.filter((p) => now.getTime() - p.soldAt.getTime() <= 30 * DAY).length;
@@ -56,10 +60,12 @@ export function computeMetrics(
   const ratio =
     stats.medianCents !== null && book.listPriceCents ? Math.round((stats.medianCents / book.listPriceCents) * 100) / 100 : null;
 
+  const rows = sold.map((p) => ({ priceCents: p.priceCents, soldAt: p.soldAt.toISOString(), platform: p.platform }));
   return {
     sales12m,
     sales30d,
-    lastSales: sold.slice(0, 5).map((p) => ({ priceCents: p.priceCents, soldAt: p.soldAt.toISOString() })),
+    lastSales: rows.slice(0, 5),
+    sales: rows,
     weightedProfit30dCents,
     ratio,
     currentPriceCents: offers.length ? Math.min(...offers.map((p) => p.priceCents)) : null,

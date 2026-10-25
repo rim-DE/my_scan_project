@@ -21,6 +21,8 @@ describe("indicateurs façon BiblioScan", () => {
     expect(m.sales12m).toBe(3);
     expect(m.sales30d).toBe(1);
     expect(m.lastSales.map((s) => s.priceCents)).toEqual([2500, 2300, 2400]);
+    expect(m.sales).toHaveLength(3);
+    expect(m.sales[0].platform).toBe("ebay");
     // Médiane 2500, 3 ventes par an = 0,25 vente par mois.
     expect(stats.medianCents).toBe(2500);
     expect(m.weightedProfit30dCents).toBe(625);

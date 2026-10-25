@@ -8,7 +8,7 @@ Application web personnelle inspirée de BiblioScan : tu photographies une étag
 | --- | --- |
 | **Dashboard** | Scans passés (nom, date, nombre de photos, nombre de livres, statut, favori, suppression, recherche), listes d'achat, scans favoris, scans par code-barres |
 | **Nouveau scan** | Envoi de plusieurs photos (glisser-déposer ou appareil photo), choix de la langue des livres, traitement en arrière-plan avec statut *En attente / En cours / Terminé / Erreur*. Ou recherche directe par ISBN avec choix du pays |
-| **Résultat d'un scan** | Photo avec le contour incliné de chaque livre (4 coins, comme BiblioScan), recherche, export CSV, 8 tris (profit 30j, rachat, profit net, médian, prix actuel, ventes, dernière vente, ordre de la photo), et une liste déroulante où chaque livre montre : sa tranche découpée et redressée pour vérifier que c'est le bon, couverture, profit net, profit pondéré sur 30 jours, prix médian de ventes, prix max d'achat conseillé, ventes sur 12 mois, 5 dernières ventes, prix actuel, rachat Momox, ratio prix/prix éditeur, ISBN-13/10, toutes les offres par site |
+| **Résultat d'un scan** | Photo avec le contour incliné de chaque livre (4 coins, comme BiblioScan), recherche, export CSV, 8 tris (profit 30j, rachat, profit net, médian, prix actuel, ventes, dernière vente, ordre de la photo), et une liste déroulante où chaque livre montre : sa tranche découpée et redressée pour vérifier que c'est le bon, couverture, profit net, profit pondéré sur 30 jours, prix médian de ventes, prix max d'achat conseillé, ventes sur 12 mois, 5 dernières ventes, prix actuel, rachat Momox, ratio prix/prix éditeur, ISBN-13/10, toutes les offres par site. À droite de la tranche, trois boutons : **emplacement** (la photo avec le livre surligné en rose et un rond qui clignote, la tranche et l'ISBN-13 \| ISBN-10), **historique des ventes** (graphique par mois et liste des ventes sur 12 mois) et **« … »** (les sites de vente avec le meilleur prix connu, chaque icône ouvre les annonces du livre sur ce site, plus la meilleure offre Amazon et le bouton Actualiser) |
 | **Calculer un prix** | Estimation de revente d'un livre (ISBN ou photo) selon son état |
 | **Mon stock** | Livres gardés pour la revente : état, statut (en stock / en vente / vendu), prix d'achat et de vente, valeur estimée totale |
 | **Listes d'achat** | Listes de livres à acheter |
@@ -107,7 +107,7 @@ npm run scan:report -- etagere.jpg --demo           # idem avec des prix de dém
 npm run scan:report -- etagere.jpg --detections etagere-resultat-lecture.json   # rejoue une lecture sans rappeler Claude
 ```
 
-La commande écrit une page HTML autonome (photo comprise) avec la même mise en page que la page de résultats : contours sur la photo, tranches redressées, statistiques, tris, export. Chaque vraie détection est aussi enregistrée en JSON pour pouvoir la rejouer gratuitement.
+La commande écrit une page HTML autonome (photo comprise) avec la même mise en page que la page de résultats : contours sur la photo, tranches redressées, statistiques, les trois boutons de chaque livre, tris, export. Chaque vraie détection est aussi enregistrée en JSON pour pouvoir la rejouer gratuitement.
 
 ## Variables d'environnement
 
@@ -149,6 +149,7 @@ Le fichier `vercel.json` programme `/api/cron` toutes les 10 minutes pour repren
 prisma/schema.prisma        schéma de la base
 src/lib/vision.ts           détection des livres par Claude (contours à 4 coins, sens de lecture)
 src/lib/geometry.ts         contours, recouvrement, redressement des tranches
+src/components/BookPanels.tsx  boutons emplacement / historique / « … » d'un livre
 src/lib/report.ts           page HTML autonome de résultats
 src/lib/books.ts            Google Books / Open Library
 src/lib/catalog.ts          enregistrement des livres + cache des recherches

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseEbayItems, mapEbayCondition } from "../prices/providers/ebay";
 import { parseKeepaProduct, parseKeepaSales } from "../prices/providers/keepa";
 import { demoPrices } from "../prices/providers/demo";
-import { PLATFORMS } from "../prices/platforms";
+import { bestAmazonOffer, PLATFORMS, siteLinks } from "../prices/platforms";
 
 describe("sources de prix", () => {
   it("lit les annonces eBay", () => {
@@ -50,5 +50,32 @@ describe("sources de prix", () => {
       expect(p.searchUrl({ isbn13: "9781452151755", title: "Celtic Tales" })).toMatch(/^https:\/\//);
     }
     expect(PLATFORMS.map((p) => p.id)).toEqual(["amazon", "fnac", "rakuten", "leboncoin", "vinted", "momox", "recyclivre", "abebooks", "ebay"]);
+  });
+});
+
+describe("liens vers les annonces (fenêtre « … »)", () => {
+  it("met le comparateur en premier, Keepa à la fin, et le meilleur prix de chaque site", () => {
+    const links = siteLinks({ isbn13: "9782253088578", title: "Le livre" }, [
+      { platform: "amazon", offerType: "USED", priceCents: 2640 },
+      { platform: "amazon", offerType: "NEW", priceCents: 3100 },
+      { platform: "momox", offerType: "BUYBACK", priceCents: 676 },
+    ]);
+    expect(links[0].id).toBe("chasseauxlivres");
+    expect(links.at(-1)!.id).toBe("keepa");
+    expect(links.at(-1)!.url).toContain("9782253088578");
+    expect(links.find((l) => l.id === "amazon")).toMatchObject({ priceCents: 2640, priceKind: "offer" });
+    expect(links.find((l) => l.id === "momox")).toMatchObject({ priceCents: 676, priceKind: "buyback" });
+    expect(links.find((l) => l.id === "fnac")!.priceCents).toBeNull();
+  });
+
+  it("sans ISBN, cherche par titre et auteur et retire les sites qui exigent un ISBN", () => {
+    const links = siteLinks({ isbn13: null, title: "L'Étranger", author: "Camus" }, []);
+    expect(links.some((l) => l.id === "momox")).toBe(false);
+    expect(links.find((l) => l.id === "amazon")!.url).toContain(encodeURIComponent("L'Étranger Camus"));
+  });
+
+  it("choisit l'offre Amazon la moins chère", () => {
+    expect(bestAmazonOffer([{ platform: "amazon", offerType: "NEW", priceCents: 900 }, { platform: "amazon", offerType: "USED", priceCents: 700 }, { platform: "ebay", offerType: "USED", priceCents: 100 }])?.priceCents).toBe(700);
+    expect(bestAmazonOffer([])).toBeNull();
   });
 });

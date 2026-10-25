@@ -83,3 +83,67 @@ export const PLATFORM_BY_ID: Record<string, Platform> = Object.fromEntries(PLATF
 export function platformName(id: string): string {
   return PLATFORM_BY_ID[id]?.name ?? id;
 }
+
+/** Sites de recherche qui ne sont pas des places de marché suivies (comparateur, historique de prix). */
+const LOOKUP_SITES: Pick<Platform, "id" | "name" | "color" | "searchUrl">[] = [
+  {
+    id: "chasseauxlivres",
+    name: "Chasse aux Livres",
+    color: "#7c3aed",
+    searchUrl: ({ isbn13 }) => `https://www.chasse-aux-livres.fr/search?query=${isbn13}`,
+  },
+  {
+    id: "keepa",
+    name: "Keepa",
+    color: "#1e293b",
+    // 4 = amazon.fr dans la numérotation des domaines Keepa.
+    searchUrl: ({ isbn13 }) => `https://keepa.com/#!search/4-${isbn13}`,
+  },
+];
+
+/** Ordre des icônes dans la fenêtre « … », comme dans BiblioScan : le comparateur d'abord, Keepa à la fin. */
+const SITE_ORDER = ["chasseauxlivres", "amazon", "ebay", "fnac", "rakuten", "vinted", "leboncoin", "momox", "recyclivre", "abebooks", "keepa"];
+
+export interface SiteLink {
+  id: string;
+  name: string;
+  color: string;
+  url: string;
+  /** Meilleur prix connu sur ce site : l'offre la moins chère, ou le rachat le plus haut (Momox…). */
+  priceCents: number | null;
+  priceKind: "offer" | "buyback" | null;
+}
+
+/** Sites dont la recherche ne marche qu'avec un ISBN (rachat Momox, recherche AbeBooks par ISBN). */
+const ISBN_ONLY = new Set(["momox", "abebooks"]);
+
+/**
+ * Liens vers les annonces de ce livre sur chaque site, avec le meilleur prix connu de nos sources.
+ * Sans ISBN (livre lu sur la photo mais pas identifié), on cherche par titre et auteur là où c'est possible.
+ */
+export function siteLinks(
+  q: { isbn13: string | null; title: string; author?: string | null },
+  prices: { platform: string; offerType: string; priceCents: number }[],
+): SiteLink[] {
+  const all = [...PLATFORMS, ...LOOKUP_SITES];
+  const text = [q.title, q.author].filter(Boolean).join(" ");
+  const query = { isbn13: q.isbn13 ?? enc(text), title: q.isbn13 ? q.title : text };
+  const ids = SITE_ORDER.filter((id) => q.isbn13 || !ISBN_ONLY.has(id));
+  return ids.map((id) => all.find((p) => p.id === id)!).map((p) => {
+    const offers = prices.filter((x) => x.platform === p.id && (x.offerType === "USED" || x.offerType === "NEW"));
+    const buybacks = prices.filter((x) => x.platform === p.id && x.offerType === "BUYBACK");
+    const priceKind = offers.length ? "offer" : buybacks.length ? "buyback" : null;
+    const priceCents = offers.length
+      ? Math.min(...offers.map((x) => x.priceCents))
+      : buybacks.length
+        ? Math.max(...buybacks.map((x) => x.priceCents))
+        : null;
+    return { id: p.id, name: p.name, color: p.color, url: p.searchUrl(query), priceCents, priceKind };
+  });
+}
+
+/** Meilleure offre Amazon connue (la moins chère, occasion ou neuf), pour la carte « Buy Box ». */
+export function bestAmazonOffer<T extends { platform: string; offerType: string; priceCents: number }>(prices: T[]): T | null {
+  const offers = prices.filter((p) => p.platform === "amazon" && (p.offerType === "USED" || p.offerType === "NEW"));
+  return offers.length ? offers.reduce((a, b) => (b.priceCents < a.priceCents ? b : a)) : null;
+}

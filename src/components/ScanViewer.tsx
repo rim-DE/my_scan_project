@@ -204,6 +204,7 @@ export function ScanViewer({ photos, detections, t, country, lists, path, locale
             key={d.id}
             detection={d}
             photo={d.photoId ? photoById[d.photoId] : null}
+            photos={photos}
             t={t}
             country={country}
             lists={lists}
