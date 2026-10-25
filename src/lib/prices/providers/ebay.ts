@@ -88,6 +88,6 @@ export const ebayProvider: PriceProvider = {
     });
     if (!res.ok) throw new Error(`eBay Browse HTTP ${res.status}`);
     const json = (await res.json()) as { itemSummaries?: EbayItemSummary[] };
-    return parseEbayItems(json.itemSummaries ?? [], mp.currency);
+    return { observations: parseEbayItems(json.itemSummaries ?? [], mp.currency) };
   },
 };

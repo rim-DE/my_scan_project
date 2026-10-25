@@ -57,19 +57,19 @@ model User {
 }
 
 model Scan {
-  id           String        @id @default(cuid())
+  id           String      @id @default(cuid())
   userId       String
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   name         String
-  kind         ScanKind      @default(PHOTO)
-  status       ScanStatus    @default(PENDING)
-  bookLanguage String        @default("fr")
-  country      String        @default("FR")
-  favorite     Boolean       @default(false)
+  kind         ScanKind    @default(PHOTO)
+  status       ScanStatus  @default(PENDING)
+  bookLanguage String      @default("fr")
+  country      String      @default("FR")
+  favorite     Boolean     @default(false)
   error        String?
   startedAt    DateTime?
   finishedAt   DateTime?
-  createdAt    DateTime      @default(now())
+  createdAt    DateTime    @default(now())
   photos       Photo[]
   detections   Detection[]
 
@@ -92,45 +92,52 @@ model Photo {
 
 /// Un livre repéré dans un scan (tranche sur une photo, ou code-barres saisi).
 model Detection {
-  id         String   @id @default(cuid())
-  scanId     String
-  scan       Scan     @relation(fields: [scanId], references: [id], onDelete: Cascade)
-  photoId    String?
-  photo      Photo?   @relation(fields: [photoId], references: [id], onDelete: Cascade)
-  bookId     String?
-  book       Book?    @relation(fields: [bookId], references: [id], onDelete: SetNull)
-  rawTitle   String?
-  rawAuthor  String?
-  spineText  String?
+  id            String   @id @default(cuid())
+  scanId        String
+  scan          Scan     @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  photoId       String?
+  photo         Photo?   @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  bookId        String?
+  book          Book?    @relation(fields: [bookId], references: [id], onDelete: SetNull)
+  rawTitle      String?
+  rawAuthor     String?
+  spineText     String?
   /// Boîte englobante normalisée {x, y, w, h} entre 0 et 1 (relative à la photo).
-  bbox       Json?
-  confidence String?
-  note       String?
-  createdAt  DateTime @default(now())
+  bbox          Json?
+  /// Contour incliné du livre : 4 points [{x, y}] entre 0 et 1 (null pour les anciens scans).
+  polygon       Json?
+  /// Sens de lecture de la tranche : bottom_to_top, top_to_bottom ou left_to_right.
+  textDirection String?
+  confidence    String?
+  note          String?
+  createdAt     DateTime @default(now())
 
   @@index([scanId])
 }
 
 model Book {
-  id            String              @id @default(cuid())
-  isbn13        String?             @unique
-  isbn10        String?
-  title         String
-  authors       String[]
-  publisher     String?
-  publishedDate String?
-  language      String?
-  pageCount     Int?
-  coverUrl      String?
+  id             String             @id @default(cuid())
+  isbn13         String?            @unique
+  isbn10         String?
+  title          String
+  authors        String[]
+  publisher      String?
+  publishedDate  String?
+  language       String?
+  pageCount      Int?
+  coverUrl       String?
   listPriceCents Int?
-  source        String
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
-  detections    Detection[]
-  prices        PriceSnapshot[]
-  fetches       PriceFetch[]
-  stockItems    StockItem[]
-  listItems     ShoppingListItem[]
+  /// Nombre de ventes estimé (Keepa : baisses du classement des ventes Amazon), si une source le fournit.
+  sales30d       Int?
+  sales12m       Int?
+  source         String
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  detections     Detection[]
+  prices         PriceSnapshot[]
+  fetches        PriceFetch[]
+  stockItems     StockItem[]
+  listItems      ShoppingListItem[]
 }
 
 /// Cache des recherches titre/auteur -> livre, pour éviter de rappeler Google Books.

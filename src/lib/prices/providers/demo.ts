@@ -15,13 +15,24 @@ function seeded(seed: string): () => number {
   };
 }
 
-export function demoPrices(isbn13: string, country: string): PriceObservation[] {
+const HOUR = 3600 * 1000;
+
+export function demoPrices(isbn13: string, country: string, now = new Date()): PriceObservation[] {
   const rnd = seeded(isbn13 + country);
   const base = 300 + Math.floor(rnd() * 2500); // entre 3 € et 28 €
   const out: PriceObservation[] = [];
   for (const p of PLATFORMS) {
     if (p.id === "momox" || p.id === "recyclivre") {
-      if (p.id === "momox") out.push({ platform: p.id, offerType: "BUYBACK", priceCents: Math.round(base * (0.08 + rnd() * 0.15)), currency: "EUR", url: p.searchUrl({ isbn13, title: "" }) });
+      if (p.id === "momox") {
+        out.push({
+          platform: p.id,
+          offerType: "BUYBACK",
+          priceCents: Math.round(base * (0.08 + rnd() * 0.15)),
+          currency: "EUR",
+          url: p.searchUrl({ isbn13, title: "" }),
+          observedAt: new Date(now.getTime() - Math.floor(rnd() * 48) * HOUR),
+        });
+      }
       continue;
     }
     if (rnd() < 0.3) continue;
@@ -29,6 +40,17 @@ export function demoPrices(isbn13: string, country: string): PriceObservation[] 
     if (p.id === "amazon" || p.id === "fnac") {
       out.push({ platform: p.id, offerType: "NEW", priceCents: Math.round(base * 1.4), currency: "EUR", url: p.searchUrl({ isbn13, title: "" }) });
     }
+  }
+  // Historique de ventes factice : de 0 à 24 ventes sur l'année, autour du prix de base.
+  const sales = Math.floor(rnd() ** 2 * 25);
+  for (let i = 0; i < sales; i++) {
+    out.push({
+      platform: rnd() < 0.5 ? "ebay" : "rakuten",
+      offerType: "SOLD",
+      priceCents: Math.round(base * (0.8 + rnd() * 0.4)),
+      currency: "EUR",
+      observedAt: new Date(now.getTime() - Math.floor(rnd() * 365 * 24) * HOUR),
+    });
   }
   return out;
 }
@@ -38,6 +60,6 @@ export const demoProvider: PriceProvider = {
   source: "demo",
   enabled: () => env.priceDemoMode(),
   async fetch(book, country) {
-    return demoPrices(book.isbn13, country);
+    return { observations: demoPrices(book.isbn13, country) };
   },
 };

@@ -5,7 +5,8 @@ import { computeStats, bestByPlatform, type PriceStats } from "./prices/stats";
 import { resaleSettings } from "./prices";
 import type { BadgeStats } from "./badges";
 import type { Prisma } from "@prisma/client";
-import type { NormalizedBox } from "./vision";
+import type { NormalizedBox, Point, TextDirection } from "./geometry";
+import { computeMetrics, type BookMetrics } from "./prices/metrics";
 
 export interface PriceRow {
   id: string;
@@ -29,6 +30,7 @@ export interface BookView {
   coverUrl: string | null;
   listPriceCents: number | null;
   stats: PriceStats;
+  metrics: BookMetrics;
   prices: PriceRow[];
   hasDemo: boolean;
 }
@@ -49,6 +51,7 @@ export function toBookView(book: BookWithPrices, country: string): BookView {
       observedAt: p.observedAt.toISOString(),
     }))
     .sort((a, b) => a.priceCents - b.priceCents);
+  const stats = computeStats(snaps, resaleSettings());
   return {
     id: book.id,
     isbn13: book.isbn13,
@@ -59,7 +62,8 @@ export function toBookView(book: BookWithPrices, country: string): BookView {
     publishedDate: book.publishedDate,
     coverUrl: book.coverUrl,
     listPriceCents: book.listPriceCents,
-    stats: computeStats(snaps, resaleSettings()),
+    stats,
+    metrics: computeMetrics(snaps, stats, book),
     prices: bestByPlatform(rows),
     hasDemo: snaps.some((s) => s.source === "demo"),
   };
@@ -71,6 +75,8 @@ export interface DetectionView {
   rawTitle: string | null;
   rawAuthor: string | null;
   bbox: NormalizedBox | null;
+  polygon: Point[] | null;
+  textDirection: TextDirection | null;
   confidence: string | null;
   note: string | null;
   book: BookView | null;
@@ -91,6 +97,8 @@ export async function getScanView(scanId: string, userId: string) {
     rawTitle: d.rawTitle,
     rawAuthor: d.rawAuthor,
     bbox: (d.bbox as NormalizedBox | null) ?? null,
+    polygon: (d.polygon as Point[] | null) ?? null,
+    textDirection: (d.textDirection as TextDirection | null) ?? null,
     confidence: d.confidence,
     note: d.note,
     book: d.book ? toBookView(d.book, scan.country) : null,

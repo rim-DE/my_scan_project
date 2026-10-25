@@ -32,6 +32,9 @@ export default async function ScanPage({ params }: { params: Promise<{ id: strin
         <h1 className="text-xl font-semibold">{scan.name}</h1>
         <StatusBadge status={scan.status} label={t.status[scan.status]} />
         <span className="text-xl">{FLAGS[scan.country] ?? scan.country}</span>
+        <span className="text-sm text-slate-500">
+          {scan.createdAt.toLocaleString(locale === "en" ? "en-GB" : "fr-FR")} · {scan.photos.length} 🖼 · {detections.length} 📖
+        </span>
       </div>
 
       {running && (
