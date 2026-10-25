@@ -1,4 +1,5 @@
 const COLORS: Record<string, string> = {
+  UPLOADING: "bg-sky-100 text-sky-700",
   PENDING: "bg-slate-100 text-slate-600",
   PROCESSING: "bg-amber-100 text-amber-700",
   DONE: "bg-green-100 text-green-700",

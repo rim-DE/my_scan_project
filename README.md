@@ -132,16 +132,22 @@ Toutes sont décrites dans [`.env.example`](.env.example).
 | `RESALE_FEE_RATE`, `RESALE_FIXED_COST_CENTS`, `TARGET_ROI` | non | Paramètres de rentabilité |
 | `CRON_SECRET` | en production | Protège la route `/api/cron` |
 
-## Déployer (étape suivante)
+## Déployer
 
-Le plus simple : **Vercel** + une base **Neon** (PostgreSQL gratuit) + **Cloudflare R2** pour les photos.
+**Vercel** (hébergement) + **Neon** (PostgreSQL gratuit) + **Cloudflare R2** (photos, gratuit jusqu'à 10 Go).
 
-1. Crée une base sur Neon et copie son URL dans `DATABASE_URL`.
-2. Crée un bucket R2 et renseigne `STORAGE_DRIVER=s3` et les variables `S3_*` (sur Vercel le disque n'est pas permanent : le stockage local ne marche pas).
-3. Importe le dépôt sur Vercel, ajoute les variables d'environnement, dont `CRON_SECRET`.
-4. Lance `npx prisma migrate deploy` avec l'URL de production (ou ajoute-le à la commande de build).
+1. **Neon** : crée un projet (région Europe). Dans « Connect », désactive *Connection pooling* puis copie l'adresse dans `DATABASE_URL` (les migrations Prisma ont besoin d'une connexion directe).
+2. **Cloudflare R2** : crée un bucket et un jeton d'API « Object Read & Write » limité à ce bucket. Renseigne `STORAGE_DRIVER=s3`, `S3_BUCKET`, `S3_REGION=auto`, `S3_ENDPOINT` (`https://<id-de-compte>.r2.cloudflarestorage.com`), `S3_ACCESS_KEY_ID` et `S3_SECRET_ACCESS_KEY`. Sur Vercel le disque n'est pas permanent : le stockage local ne marche pas.
+3. **Vercel** : importe le dépôt GitHub, ajoute les variables d'environnement (`DATABASE_URL`, `AUTH_SECRET`, `ANTHROPIC_API_KEY`, `CRON_SECRET`, `STORAGE_DRIVER`, `S3_*`, et si tu les as `GOOGLE_BOOKS_API_KEY`, `EBAY_*`, `KEEPA_API_KEY`), puis déploie. Pour `AUTH_SECRET` et `CRON_SECRET` : `openssl rand -base64 32`.
+4. Ouvre l'adresse donnée par Vercel et crée ton compte (le premier compte peut toujours s'inscrire).
 
-Le fichier `vercel.json` programme `/api/cron` toutes les 10 minutes pour reprendre les scans interrompus. Le traitement d'un scan peut durer quelques minutes : un plan Vercel qui autorise 300 s par fonction est recommandé si tu envoies beaucoup de photos d'un coup.
+Rien d'autre à lancer : Vercel utilise le script `vercel-build`, qui applique les migrations (`prisma migrate deploy`) avant chaque build.
+
+Points propres à Vercel :
+
+- **Taille des envois** : Vercel refuse les requêtes de plus de 4,5 Mo. Le navigateur réduit donc chaque photo (taille lue par le modèle, environ 1 Mo en JPEG) et l'envoie seule : `POST /api/scans` crée le scan, `POST /api/scans/[id]/photos` ajoute une photo, `POST /api/scans/[id]/start` lance le traitement.
+- **Cron** : la formule gratuite (Hobby) n'autorise qu'un passage par jour, donc `vercel.json` appelle `/api/cron` à 4 h (UTC). Avec Vercel Pro, remets `*/10 * * * *` pour reprendre les scans interrompus toutes les 10 minutes.
+- **Durée** : le traitement d'un scan tourne jusqu'à 300 s par fonction. Au-delà (beaucoup de photos d'un coup), le cron reprend le scan.
 
 ## Organisation du code
 

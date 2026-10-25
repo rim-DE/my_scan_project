@@ -43,6 +43,7 @@ export const fr = {
     confirmDelete: "Supprimer ce scan ?",
   },
   status: {
+    UPLOADING: "Envoi des photos",
     PENDING: "En attente",
     PROCESSING: "En cours",
     DONE: "Terminé",
