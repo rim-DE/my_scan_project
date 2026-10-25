@@ -45,13 +45,17 @@ export function similarity(a: string, b: string): number {
   return (2 * common) / (ta.size + tb.size);
 }
 
-export function scoreCandidate(query: { title: string; author?: string | null }, c: BookInfo): number {
+/** Pénalité quand l'édition trouvée n'est pas dans la langue des livres scannés (ex. édition polonaise d'un livre français). */
+export const OTHER_LANGUAGE_PENALTY = 0.15;
+
+export function scoreCandidate(query: { title: string; author?: string | null; language?: string | null }, c: BookInfo): number {
   let score = similarity(query.title, c.title);
   if (query.author && c.authors.length > 0) {
     const a = Math.max(...c.authors.map((x) => similarity(query.author!, x)));
     score = score * 0.75 + a * 0.25;
   }
   if (c.isbn13) score += 0.02; // léger bonus si on a un ISBN exploitable
+  if (query.language && c.language && c.language !== query.language) score -= OTHER_LANGUAGE_PENALTY;
   return score;
 }
 
@@ -125,6 +129,9 @@ interface OpenLibraryDoc {
   number_of_pages_median?: number;
 }
 
+// Open Library donne des codes à 3 lettres (MARC) ; Google Books et l'appli utilisent ceux à 2 lettres.
+const MARC_LANGUAGES: Record<string, string> = { fre: "fr", eng: "en", ger: "de", spa: "es", ita: "it", por: "pt", dut: "nl", pol: "pl" };
+
 export function parseOpenLibraryDoc(d: OpenLibraryDoc): BookInfo | null {
   if (!d.title) return null;
   const isbns = (d.isbn ?? []).map((i) => normalizeIsbn(i)).filter((x) => x !== null);
@@ -136,7 +143,7 @@ export function parseOpenLibraryDoc(d: OpenLibraryDoc): BookInfo | null {
     authors: d.author_name ?? [],
     publisher: d.publisher?.[0] ?? null,
     publishedDate: d.first_publish_year ? String(d.first_publish_year) : null,
-    language: d.language?.[0] ?? null,
+    language: d.language?.[0] ? (MARC_LANGUAGES[d.language[0]] ?? d.language[0]) : null,
     pageCount: d.number_of_pages_median ?? null,
     coverUrl: d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-M.jpg` : null,
     listPriceCents: null,
@@ -187,7 +194,7 @@ export class CatalogUnavailableError extends Error {
   }
 }
 
-function pickBest(query: { title: string; author?: string | null }, candidates: BookInfo[]): BookInfo | null {
+function pickBest(query: { title: string; author?: string | null; language?: string }, candidates: BookInfo[]): BookInfo | null {
   let best: BookInfo | null = null;
   let bestScore = 0;
   for (const c of candidates) {
@@ -223,5 +230,6 @@ export async function lookupByTitle(query: { title: string; author?: string | nu
 }
 
 export function lookupCacheKey(title: string, author: string | null | undefined, language: string): string {
-  return `${language}|${normalizeText(title)}|${normalizeText(author ?? "")}`;
+  // "v2" : les recherches faites avant la pénalité de langue ne sont pas réutilisées.
+  return `v2|${language}|${normalizeText(title)}|${normalizeText(author ?? "")}`;
 }
