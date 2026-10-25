@@ -22,10 +22,14 @@ describe("stockage", () => {
     vi.unstubAllEnvs();
   });
 
-  it("choisit Vercel Blob quand Vercel fournit le jeton, sauf si STORAGE_DRIVER l'impose", () => {
+  it("choisit Vercel Blob quand Vercel fournit un jeton ou un identifiant de magasin, sauf si STORAGE_DRIVER l'impose", () => {
     vi.stubEnv("STORAGE_DRIVER", "");
     vi.stubEnv("BLOB_READ_WRITE_TOKEN", "");
+    vi.stubEnv("BLOB_STORE_ID", "");
     expect(env.storageDriver()).toBe("local");
+    vi.stubEnv("BLOB_STORE_ID", "store_abc");
+    expect(env.storageDriver()).toBe("blob");
+    vi.stubEnv("BLOB_STORE_ID", "");
     vi.stubEnv("BLOB_READ_WRITE_TOKEN", "vercel_blob_rw_x");
     expect(env.storageDriver()).toBe("blob");
     vi.stubEnv("STORAGE_DRIVER", "s3");
