@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { cleanDetections, DetectionResultSchema, normalizeBox, type DetectedBook } from "../vision";
+import { cleanDetections, DetectionResultSchema, type DetectedBook } from "../vision";
+
+const SIZE = { width: 1000, height: 2000 };
+
+const quad = (x0: number, y0: number, x1: number, y1: number) => [
+  { x: x0, y: y0 },
+  { x: x1, y: y0 },
+  { x: x1, y: y1 },
+  { x: x0, y: y1 },
+];
 
 const book = (over: Partial<DetectedBook>): DetectedBook => ({
   title: "Festival Fairy Tales",
@@ -7,22 +16,46 @@ const book = (over: Partial<DetectedBook>): DetectedBook => ({
   publisher: null,
   isbn: null,
   spine_text: "Festival Fairy Tales",
-  box: { x0: 700, y0: 800, x1: 740, y1: 990 },
+  corners: quad(700, 1600, 740, 1980),
+  text_direction: "bottom_to_top",
   confidence: "high",
   ...over,
 });
 
 describe("détection", () => {
-  it("normalise les boîtes (inversées, hors cadre, trop petites)", () => {
-    expect(normalizeBox({ x0: 100, y0: 200, x1: 300, y1: 600 })).toEqual({ x: 0.1, y: 0.2, w: 0.2, h: 0.4 });
-    expect(normalizeBox({ x0: 300, y0: 600, x1: 100, y1: 200 })).toEqual({ x: 0.1, y: 0.2, w: 0.2, h: 0.4 });
-    expect(normalizeBox({ x0: -50, y0: 0, x1: 1200, y1: 1000 })).toEqual({ x: 0, y: 0, w: 1, h: 1 });
-    expect(normalizeBox({ x0: 10, y0: 10, x1: 11, y1: 500 })).toBeNull();
+  it("convertit les coins en pixels en contour normalisé et calcule le rectangle englobant", () => {
+    const [d] = cleanDetections([book({})], SIZE);
+    expect(d.polygon).toEqual([
+      { x: 0.7, y: 0.8 },
+      { x: 0.74, y: 0.8 },
+      { x: 0.74, y: 0.99 },
+      { x: 0.7, y: 0.99 },
+    ]);
+    expect(d.bbox!.x).toBeCloseTo(0.7);
+    expect(d.bbox!.w).toBeCloseTo(0.04);
+    expect(d.bbox!.h).toBeCloseTo(0.19);
   });
 
-  it("supprime les doublons et les titres vides", () => {
-    const out = cleanDetections([book({}), book({ title: "  festival  fairy tales " }), book({ title: "x" }), book({ title: "Le Kit" })]);
+  it("supprime les doublons qui se recouvrent et les titres vides", () => {
+    const out = cleanDetections(
+      [book({}), book({ title: "  festival  fairy tales ", corners: quad(702, 1610, 741, 1975) }), book({ title: "x" }), book({ title: "Le Kit" })],
+      SIZE,
+    );
     expect(out.map((b) => b.title)).toEqual(["Festival Fairy Tales", "Le Kit"]);
+  });
+
+  it("garde deux livres de même titre rangés à deux endroits différents", () => {
+    const out = cleanDetections(
+      [book({ title: "Léonard de Vinci", corners: quad(100, 100, 140, 500) }), book({ title: "Léonard de Vinci", corners: quad(600, 1200, 650, 1600) })],
+      SIZE,
+    );
+    expect(out).toHaveLength(2);
+  });
+
+  it("garde un livre même si sa forme est inutilisable (sans contour)", () => {
+    const [d] = cleanDetections([book({ corners: [{ x: 1, y: 1 }] })], SIZE);
+    expect(d.polygon).toBeNull();
+    expect(d.bbox).toBeNull();
   });
 
   it("le schéma accepte une réponse type du modèle", () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseEbayItems, mapEbayCondition } from "../prices/providers/ebay";
-import { parseKeepaProduct } from "../prices/providers/keepa";
+import { parseKeepaProduct, parseKeepaSales } from "../prices/providers/keepa";
 import { demoPrices } from "../prices/providers/demo";
 import { PLATFORMS } from "../prices/platforms";
 
@@ -31,9 +31,18 @@ describe("sources de prix", () => {
     ]);
   });
 
-  it("le mode démo est déterministe", () => {
-    expect(demoPrices("9781452151755", "FR")).toEqual(demoPrices("9781452151755", "FR"));
-    expect(demoPrices("9781452151755", "FR").length).toBeGreaterThan(0);
+  it("lit le nombre de ventes estimé par Keepa", () => {
+    expect(parseKeepaSales({ stats: { salesRankDrops30: 2, salesRankDrops365: 24 } })).toEqual({ sales30d: 2, sales12m: 24 });
+    expect(parseKeepaSales({ stats: { salesRankDrops30: -1 } })).toEqual({ sales30d: null, sales12m: null });
+  });
+
+  it("le mode démo est déterministe et invente aussi des ventes passées datées", () => {
+    const now = new Date("2026-10-25T12:00:00Z");
+    expect(demoPrices("9781452151755", "FR", now)).toEqual(demoPrices("9781452151755", "FR", now));
+    const all = Array.from({ length: 20 }, (_, i) => demoPrices(`97814521517${String(i).padStart(2, "0")}`, "FR", now)).flat();
+    const sold = all.filter((o) => o.offerType === "SOLD");
+    expect(sold.length).toBeGreaterThan(0);
+    expect(sold.every((o) => o.observedAt! <= now && now.getTime() - o.observedAt!.getTime() <= 365 * 24 * 3600 * 1000)).toBe(true);
   });
 
   it("chaque plateforme a un lien de recherche https", () => {

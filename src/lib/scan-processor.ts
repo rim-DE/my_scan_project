@@ -3,7 +3,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "./db";
 import { getStorage } from "./storage";
-import { detectBooks, normalizeBox } from "./vision";
+import { detectBooks } from "./vision";
 import { findOrCreateBookByIsbn, findOrCreateBookByTitle } from "./catalog";
 import { refreshPrices } from "./prices";
 import { mapLimit } from "./concurrency";
@@ -51,7 +51,9 @@ export async function processScan(scanId: string): Promise<void> {
               rawTitle: d.title,
               rawAuthor: d.author,
               spineText: d.spine_text,
-              bbox: (normalizeBox(d.box) as unknown as Prisma.InputJsonObject) ?? undefined,
+              bbox: (d.bbox as unknown as Prisma.InputJsonObject) ?? undefined,
+              polygon: (d.polygon as unknown as Prisma.InputJsonArray) ?? undefined,
+              textDirection: d.text_direction,
               confidence: d.confidence,
             },
           });

@@ -1,7 +1,7 @@
 // Keepa (payant, https://keepa.com/#!api) : données Amazon sous licence.
 // C'est l'alternative légale au scraping d'Amazon, interdit par ses CGU.
 import { env } from "../../env";
-import type { PriceObservation, PriceProvider } from "../types";
+import type { PriceObservation, PriceProvider, SalesEstimate } from "../types";
 
 // Identifiants de marketplace Amazon chez Keepa.
 const DOMAINS: Record<string, { id: number; currency: string; host: string }> = {
@@ -17,7 +17,16 @@ const DOMAINS: Record<string, { id: number; currency: string; host: string }> = 
 
 interface KeepaProduct {
   asin?: string;
-  stats?: { current?: number[] };
+  stats?: { current?: number[]; salesRankDrops30?: number; salesRankDrops365?: number };
+}
+
+/**
+ * Keepa compte les baisses du classement des ventes Amazon : chaque baisse correspond à peu près à une vente.
+ * C'est l'estimation de ventes la plus fiable disponible légalement. -1 = inconnu.
+ */
+export function parseKeepaSales(p: KeepaProduct): SalesEstimate {
+  const v = (n: number | undefined) => (typeof n === "number" && n >= 0 ? n : null);
+  return { sales30d: v(p.stats?.salesRankDrops30), sales12m: v(p.stats?.salesRankDrops365) };
 }
 
 /** Dans "stats.current" : index 0 = vendu par Amazon, 1 = neuf (tiers), 2 = occasion. -1 = pas d'offre. */
@@ -52,6 +61,10 @@ export const keepaProvider: PriceProvider = {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Keepa HTTP ${res.status}`);
     const json = (await res.json()) as { products?: KeepaProduct[] };
-    return (json.products ?? []).flatMap((p) => parseKeepaProduct(p, country));
+    const products = json.products ?? [];
+    return {
+      observations: products.flatMap((p) => parseKeepaProduct(p, country)),
+      sales: products[0] ? parseKeepaSales(products[0]) : undefined,
+    };
   },
 };

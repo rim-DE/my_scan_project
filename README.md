@@ -8,7 +8,7 @@ Application web personnelle inspirée de BiblioScan : tu photographies une étag
 | --- | --- |
 | **Dashboard** | Scans passés (nom, date, nombre de photos, nombre de livres, statut, favori, suppression, recherche), listes d'achat, scans favoris, scans par code-barres |
 | **Nouveau scan** | Envoi de plusieurs photos (glisser-déposer ou appareil photo), choix de la langue des livres, traitement en arrière-plan avec statut *En attente / En cours / Terminé / Erreur*. Ou recherche directe par ISBN avec choix du pays |
-| **Résultat d'un scan** | Photo avec les livres encadrés (vert = identifié, rouge = non identifié), recherche, tri par prix médian / profit / prix de rachat, et pour chaque livre : couverture, extrait de la tranche, ISBN-13/10, prix médian, min/max, fourchette de revente conseillée, profit net estimé, prix d'achat max conseillé, tableau des prix par site avec lien et date, liens de recherche vers les 9 plateformes |
+| **Résultat d'un scan** | Photo avec le contour incliné de chaque livre (4 coins, comme BiblioScan), recherche, export CSV, 8 tris (profit 30j, rachat, profit net, médian, prix actuel, ventes, dernière vente, ordre de la photo), et une liste déroulante où chaque livre montre : sa tranche découpée et redressée pour vérifier que c'est le bon, couverture, profit net, profit pondéré sur 30 jours, prix médian de ventes, prix max d'achat conseillé, ventes sur 12 mois, 5 dernières ventes, prix actuel, rachat Momox, ratio prix/prix éditeur, ISBN-13/10, toutes les offres par site |
 | **Calculer un prix** | Estimation de revente d'un livre (ISBN ou photo) selon son état |
 | **Mon stock** | Livres gardés pour la revente : état, statut (en stock / en vente / vendu), prix d'achat et de vente, valeur estimée totale |
 | **Listes d'achat** | Listes de livres à acheter |
@@ -55,6 +55,9 @@ Pour tester l'interface sans aucune clé, mets `PRICE_DEMO_MODE=true` : l'appli 
 - **Fourchette de revente conseillée** : du 1er quartile à la médiane, pour vendre vite sans brader.
 - **Profit net estimé** : prix médian − commission (`RESALE_FEE_RATE`, 15 %) − frais fixes (`RESALE_FIXED_COST_CENTS`, 1,50 €).
 - **Prix d'achat max conseillé** : profit net ÷ (1 + `TARGET_ROI`). Avec `TARGET_ROI=1`, tu doubles ta mise. Si un site de rachat (Momox…) paie plus, c'est ce prix qui sert de plancher.
+- **Ventes sur 12 mois / 30 jours** : estimation de Keepa (baisses du classement des ventes Amazon) si `KEEPA_API_KEY` est configurée, sinon le nombre de ventes enregistrées (saisies « Vendu » ou mode démo). Les ventes individuelles avec leur prix ne sont pas disponibles légalement chez Amazon ou eBay sans accès spécial (eBay Marketplace Insights est réservé) : le tableau « Vendu il y a / Au prix de » se remplit avec tes saisies et le mode démo.
+- **Profit pondéré sur 30 jours** : profit net × chance de vendre dans le mois (ventes par mois sur l'année, plafonnées à 1). C'est le tri par défaut, proche du « BiblioRank ».
+- **Ratio** : prix médian ÷ prix éditeur.
 - **Estimation selon l'état** : médiane × coefficient (Neuf 1,25 · Comme neuf 1,1 · Très bon 1 · Bon 0,85 · Correct 0,6).
 
 ## Installation en local
@@ -96,6 +99,16 @@ Test manuel conseillé :
 3. **Nouveau scan** → envoie une photo d'étagère → le statut passe à *En cours* puis *Terminé* (environ 30 s à 2 min selon le nombre de livres), les livres sont encadrés sur la photo.
 4. Ajoute un livre au stock, puis ouvre **Mon stock**.
 
+### Tester la détection sur une photo, sans base de données
+
+```bash
+npm run scan:report -- etagere.jpg                  # Claude + catalogues + sources de prix configurées
+npm run scan:report -- etagere.jpg --demo           # idem avec des prix de démonstration (faux)
+npm run scan:report -- etagere.jpg --detections etagere-resultat-lecture.json   # rejoue une lecture sans rappeler Claude
+```
+
+La commande écrit une page HTML autonome (photo comprise) avec la même mise en page que la page de résultats : contours sur la photo, tranches redressées, statistiques, tris, export. Chaque vraie détection est aussi enregistrée en JSON pour pouvoir la rejouer gratuitement.
+
 ## Variables d'environnement
 
 Toutes sont décrites dans [`.env.example`](.env.example).
@@ -134,7 +147,9 @@ Le fichier `vercel.json` programme `/api/cron` toutes les 10 minutes pour repren
 
 ```
 prisma/schema.prisma        schéma de la base
-src/lib/vision.ts           détection des livres par Claude
+src/lib/vision.ts           détection des livres par Claude (contours à 4 coins, sens de lecture)
+src/lib/geometry.ts         contours, recouvrement, redressement des tranches
+src/lib/report.ts           page HTML autonome de résultats
 src/lib/books.ts            Google Books / Open Library
 src/lib/catalog.ts          enregistrement des livres + cache des recherches
 src/lib/prices/             sources de prix, plateformes, calculs, cache
@@ -144,6 +159,7 @@ src/app/(app)/              pages (dashboard, scans, prix, stock, listes, badges
 src/app/api/                envoi des photos, statut, photos, identification, cron
 src/app/actions.ts          actions serveur (favoris, stock, listes, notes…)
 scripts/worker.ts           worker en ligne de commande
+scripts/scan-report.ts      test d'une photo sans base de données (npm run scan:report)
 ```
 
 ## Pistes pour la suite

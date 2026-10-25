@@ -7,7 +7,8 @@ import type { DetectionView } from "@/lib/queries";
 import { formatPrice } from "@/lib/money";
 import { PLATFORMS, platformName } from "@/lib/prices/platforms";
 import { addManualPriceAction, addToListAction, addToStockAction, deletePriceAction, refreshPricesAction, saveNoteAction } from "@/app/actions";
-import { SpineCrop } from "./SpineCrop";
+import { shortAge } from "@/lib/prices/metrics";
+import { SpineImage } from "./SpineImage";
 
 interface Props {
   detection: DetectionView;
@@ -19,105 +20,161 @@ interface Props {
   locale: string;
   /** Les notes sont rattachées à un livre d'un scan : pas de note sur la page "Calculer un prix". */
   canNote?: boolean;
+  /** Livre sélectionné sur la photo (mis en évidence). */
+  selected?: boolean;
+  /** Clic sur la tranche : montrer le livre sur la photo. */
+  onShowOnPhoto?: () => void;
 }
 
 const CONDITIONS = ["NEW", "LIKE_NEW", "VERY_GOOD", "GOOD", "ACCEPTABLE"] as const;
 
-export function BookCard({ detection, photo, t, country, lists, path, locale, canNote = true }: Props) {
+export function BookCard({ detection, photo, t, country, lists, path, locale, canNote = true, selected = false, onShowOnPhoto }: Props) {
   const [panel, setPanel] = useState<null | "stock" | "list" | "note" | "price">(null);
   const [note, setNote] = useState(detection.note ?? "");
   const [pending, start] = useTransition();
   const b = detection.book;
   const loc = locale === "en" ? "en-GB" : "fr-FR";
   const fp = (c: number | null | undefined, cur = "EUR") => formatPrice(c, cur, loc);
+  const ring = selected ? "ring-2 ring-fuchsia-500" : "";
+  const spine = photo && (detection.polygon || detection.bbox) && (
+    <SpineImage
+      src={photo.url}
+      polygon={detection.polygon}
+      bbox={detection.bbox}
+      textDirection={detection.textDirection}
+      alt={`${t.book.spineAlt} : ${detection.rawTitle ?? ""}`}
+      onClick={onShowOnPhoto}
+    />
+  );
 
   if (!b) {
     return (
-      <article id={detection.id} className="card flex gap-4 opacity-80">
-        {photo && detection.bbox && <SpineCrop src={photo.url} box={detection.bbox} photoW={photo.width} photoH={photo.height} />}
-        <div>
-          <p className="text-xs font-semibold uppercase text-red-600">{t.scan.unidentified}</p>
-          <p className="font-medium">{detection.rawTitle}</p>
-          {detection.rawAuthor && <p className="text-sm text-slate-500">{detection.rawAuthor}</p>}
-        </div>
+      <article id={detection.id} className={`card space-y-2 opacity-80 ${ring}`}>
+        {spine}
+        <p className="text-xs font-semibold uppercase text-red-600">{t.scan.unidentified}</p>
+        <p className="font-medium">{detection.rawTitle}</p>
+        {detection.rawAuthor && <p className="text-sm text-slate-500">{detection.rawAuthor}</p>}
       </article>
     );
   }
 
   const s = b.stats;
-  const amazon = b.prices.filter((p) => p.platform === "amazon");
-  const momox = b.prices.find((p) => p.platform === "momox" && p.offerType === "BUYBACK");
+  const m = b.metrics;
+  const amazon = b.prices.filter((p) => p.platform === "amazon" && p.offerType !== "SOLD" && p.offerType !== "BUYBACK");
+  const amazonMin = amazon.length ? amazon.reduce((x, y) => (y.priceCents < x.priceCents ? y : x)) : null;
+  const buyback = b.prices
+    .filter((p) => p.offerType === "BUYBACK")
+    .reduce<(typeof b.prices)[number] | null>((x, y) => (!x || y.priceCents > x.priceCents ? y : x), null);
 
   return (
-    <article id={detection.id} className="card space-y-4">
+    <article id={detection.id} className={`card space-y-4 ${ring}`}>
       {b.hasDemo && <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">⚠️ {t.book.demoWarning}</p>}
 
-      <div className="flex flex-col gap-4 sm:flex-row">
-        <div className="flex shrink-0 gap-3">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="flex gap-4">
           {b.coverUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={b.coverUrl} alt={b.title} className="h-44 w-32 rounded-lg object-cover shadow" />
+            <img src={b.coverUrl} alt={b.title} className="h-44 w-32 shrink-0 rounded-lg object-cover shadow" />
           ) : (
-            <div className="grid h-44 w-32 place-items-center rounded-lg bg-mint text-4xl">📕</div>
+            <div className="grid h-44 w-32 shrink-0 place-items-center rounded-lg bg-mint text-4xl">📕</div>
           )}
-          {photo && detection.bbox && <SpineCrop src={photo.url} box={detection.bbox} photoW={photo.width} photoH={photo.height} />}
-        </div>
-
-        <div className="min-w-0 flex-1 space-y-2">
-          <h3 className="text-lg font-semibold leading-tight">{b.title}</h3>
-          <p className="text-sm text-slate-600">
-            {b.authors.join(", ")}
-            {b.publisher && ` · ${b.publisher}`}
-            {b.publishedDate && ` · ${b.publishedDate}`}
-          </p>
-          <div className="flex flex-wrap gap-2 text-xs">
-            {b.isbn13 && <span className="chip">ISBN {b.isbn13}</span>}
-            {b.isbn10 && <span className="chip">▮▯▮ {b.isbn10}</span>}
-            {b.listPriceCents && (
-              <span className="chip">
-                {t.book.publisherPrice} {fp(b.listPriceCents)}
-              </span>
+          <div className="min-w-0 space-y-1 text-sm">
+            <h3 className="text-base font-semibold leading-tight">{b.title}</h3>
+            <p className="text-slate-600">
+              {b.authors.join(", ")}
+              {b.publisher && ` · ${b.publisher}`}
+              {b.publishedDate && ` · ${b.publishedDate}`}
+            </p>
+            <p title={t.book.netProfitHelp}>
+              {t.book.netProfit} : <strong>{fp(s.netAfterFeesCents)}</strong>
+            </p>
+            <p title={t.book.weightedProfitHelp}>
+              {t.book.weightedProfit} : <strong>{fp(m.weightedProfit30dCents)}</strong>
+            </p>
+            <p>
+              {t.book.salesMedian} : <strong>{fp(s.medianCents)}</strong>
+            </p>
+            <p>
+              {t.book.maxBuyLong} : <strong>{fp(s.maxBuyCents)}</strong>
+            </p>
+            <p className="font-semibold">{m.sales12m !== null ? fmt(t.book.salesYear, { n: m.sales12m }) : t.book.salesUnknown}</p>
+            {m.currentPriceCents !== null && (
+              <p className="text-xs">
+                {amazonMin?.url ? (
+                  <a href={amazonMin.url} target="_blank" rel="noopener noreferrer" className="underline">
+                    Amazon · {fmt(t.book.currentlySold, { price: fp(amazonMin.priceCents, amazonMin.currency), n: amazon.length })}
+                  </a>
+                ) : (
+                  fmt(t.book.currentlySold, { price: fp(m.currentPriceCents), n: m.currentOfferCount })
+                )}
+              </p>
+            )}
+            {buyback && (
+              <p className="text-xs text-green-700">
+                {fmt(t.book.buybackAgo, {
+                  platform: platformName(buyback.platform),
+                  price: fp(buyback.priceCents, buyback.currency),
+                  age: shortAge(buyback.observedAt, new Date(), locale),
+                })}
+              </p>
+            )}
+            <p className="flex flex-wrap gap-x-4 text-xs text-slate-500">
+              {m.ratio !== null && (
+                <span>
+                  {t.book.ratio} : {m.ratio}
+                </span>
+              )}
+              {b.listPriceCents && (
+                <span>
+                  {t.book.publisherPrice} : {fp(b.listPriceCents)}
+                </span>
+              )}
+            </p>
+            {(b.isbn13 || b.isbn10) && (
+              <p className="text-xs text-slate-500">
+                ▮▯▮ {b.isbn13}
+                {b.isbn10 && ` / ${b.isbn10}`}
+              </p>
             )}
           </div>
+        </div>
 
-          <div className="flex flex-wrap items-end gap-4 pt-2">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-slate-500">{t.book.medianPrice}</p>
-              <p className="text-4xl font-bold text-brand">{fp(s.medianCents)}</p>
-              <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">{fmt(t.book.offers, { n: s.count })}</span>
+        <div className="min-w-0 space-y-3">
+          {spine}
+          {m.lastSales.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="text-sm">
+                <tbody>
+                  <tr className="border-b border-slate-200">
+                    <th className="py-1 pr-3 text-left font-semibold text-slate-600">{t.book.soldAgo}</th>
+                    {m.lastSales.map((x, i) => (
+                      <td key={i} className="px-2 text-center text-slate-600">
+                        {shortAge(x.soldAt, new Date(), locale)}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr>
+                    <th className="py-1 pr-3 text-left font-semibold text-slate-600">{t.book.atPrice}</th>
+                    {m.lastSales.map((x, i) => (
+                      <td key={i} className="px-2 text-center font-medium">
+                        {fp(x.priceCents)}
+                      </td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
             </div>
-            {amazon.length > 0 && (
-              <div className="rounded-2xl bg-amber-50 px-3 py-2 text-sm">
-                <span className="font-semibold">Amazon</span> : {fp(Math.min(...amazon.map((a) => a.priceCents)), amazon[0].currency)}
-              </div>
-            )}
-            {momox && (
-              <div className="rounded-2xl bg-green-50 px-3 py-2 text-sm">
-                <span className="font-semibold">Momox</span> {t.book.buyback.toLowerCase()} {fp(momox.priceCents)}
-              </div>
-            )}
-          </div>
+          ) : (
+            <p className="text-xs text-slate-500">{t.book.noSales}</p>
+          )}
         </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-slate-200 bg-slate-200 sm:grid-cols-4">
-        {[
-          [t.book.range, s.resaleRange ? `${fp(s.resaleRange[0])} – ${fp(s.resaleRange[1])}` : "—"],
-          [t.book.netProfit, fp(s.netAfterFeesCents)],
-          [t.book.maxBuy, fp(s.maxBuyCents)],
-          [`${t.book.min} / ${t.book.max}`, `${fp(s.minCents)} / ${fp(s.maxCents)}`],
-        ].map(([label, value]) => (
-          <div key={label} className="bg-white p-3">
-            <p className="text-xs text-slate-500">{label}</p>
-            <p className="font-semibold">{value}</p>
-          </div>
-        ))}
       </div>
 
       {b.prices.length === 0 ? (
         <p className="text-sm text-slate-500">{t.book.noPrice}</p>
       ) : (
-        <div className="overflow-x-auto">
+        <details className="overflow-x-auto">
+          <summary className="cursor-pointer text-sm text-brand">{fmt(t.book.allOffers, { n: b.prices.length })}</summary>
           <table className="w-full text-sm">
             <thead className="text-left text-xs text-slate-500">
               <tr>
@@ -154,7 +211,7 @@ export function BookCard({ detection, photo, t, country, lists, path, locale, ca
               ))}
             </tbody>
           </table>
-        </div>
+        </details>
       )}
 
       {b.isbn13 && (

@@ -34,7 +34,7 @@ export async function refreshPrices(bookId: string, country: string, opts: { for
     if (!opts.force && last && isFresh(last.fetchedAt, ttl)) continue;
 
     try {
-      const observations = await provider.fetch(ref, country);
+      const { observations, sales } = await provider.fetch(ref, country);
       await prisma.$transaction([
         // On remplace les anciennes données de cette source (les prix saisis à la main sont conservés).
         prisma.priceSnapshot.deleteMany({ where: { bookId, country, source: provider.source, platform: { in: platformsOf(provider.id) } } }),
@@ -49,8 +49,10 @@ export async function refreshPrices(bookId: string, country: string, opts: { for
             currency: o.currency,
             url: o.url ?? null,
             source: provider.source,
+            observedAt: o.observedAt,
           })),
         }),
+        ...(sales ? [prisma.book.update({ where: { id: bookId }, data: { sales30d: sales.sales30d, sales12m: sales.sales12m } })] : []),
         prisma.priceFetch.upsert({
           where: { bookId_provider_country: { bookId, provider: provider.id, country } },
           create: { bookId, provider: provider.id, country, ok: true },
