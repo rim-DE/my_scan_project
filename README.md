@@ -1,36 +1,154 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# BiblioScan perso
 
-## Getting Started
+Application web personnelle inspirée de BiblioScan : tu photographies une étagère ou une pile de livres, l'appli repère chaque livre, l'identifie (titre, auteur, ISBN, éditeur) et affiche les prix observés sur plusieurs plateformes, avec une estimation de revente.
 
-First, run the development server:
+## Ce que fait cette première version
+
+| Page | Contenu |
+| --- | --- |
+| **Dashboard** | Scans passés (nom, date, nombre de photos, nombre de livres, statut, favori, suppression, recherche), listes d'achat, scans favoris, scans par code-barres |
+| **Nouveau scan** | Envoi de plusieurs photos (glisser-déposer ou appareil photo), choix de la langue des livres, traitement en arrière-plan avec statut *En attente / En cours / Terminé / Erreur*. Ou recherche directe par ISBN avec choix du pays |
+| **Résultat d'un scan** | Photo avec les livres encadrés (vert = identifié, rouge = non identifié), recherche, tri par prix médian / profit / prix de rachat, et pour chaque livre : couverture, extrait de la tranche, ISBN-13/10, prix médian, min/max, fourchette de revente conseillée, profit net estimé, prix d'achat max conseillé, tableau des prix par site avec lien et date, liens de recherche vers les 9 plateformes |
+| **Calculer un prix** | Estimation de revente d'un livre (ISBN ou photo) selon son état |
+| **Mon stock** | Livres gardés pour la revente : état, statut (en stock / en vente / vendu), prix d'achat et de vente, valeur estimée totale |
+| **Listes d'achat** | Listes de livres à acheter |
+| **Badges** | 6 badges calculés à partir de ton activité |
+| **Profil** | Prénom, langue de l'interface, crédits, déconnexion |
+| **Crédits** | Chaque photo consomme un crédit (réglable) ; les recherches par ISBN sont gratuites |
+| **Langues** | Interface en français (par défaut) et en anglais |
+
+Pas encore inclus : Tarifs, Guide, Contact (prévus plus tard), application mobile.
+
+## La stack, et pourquoi
+
+- **Next.js 15 + TypeScript + Tailwind CSS** : un seul projet pour l'interface et le serveur (routes API, actions serveur), typé de bout en bout, et déployable en un clic sur Vercel. La même base servira plus tard d'API pour une appli mobile.
+- **PostgreSQL + Prisma** : base relationnelle solide (scans → photos → livres détectés → prix), Prisma génère des types TypeScript à partir du schéma et gère les migrations.
+- **API Claude (vision)** : un seul appel par photo repère tous les livres, lit les tranches (même verticales ou abîmées) et renvoie un JSON validé (titre, auteur, éditeur, ISBN s'il est lisible, position du livre sur la photo).
+- **Google Books puis Open Library** : catalogues publics et gratuits pour retrouver l'ISBN, l'éditeur et la couverture à partir du titre lu.
+- **File d'attente** : la table `Scan` sert de file (statut `PENDING`). Le traitement démarre juste après l'envoi (`after()` de Next.js). Un filet de sécurité reprend les scans bloqués : la route `/api/cron` (Vercel Cron, toutes les 10 min) ou `npm run worker` sur un serveur classique. Pas besoin de Redis pour un usage perso ; on pourra passer à une vraie file (Inngest, BullMQ…) si le volume augmente.
+- **Stockage des photos** : dossier local en développement, S3 ou compatible (Cloudflare R2, Scaleway…) en production.
+- **Cache des prix** : chaque appel à une source de prix est mémorisé (`PriceFetch`) ; la source n'est pas rappelée avant `PRICE_CACHE_TTL_HOURS` (24 h par défaut). Les recherches titre → livre sont aussi mises en cache (`LookupCache`).
+
+## Sources de prix : ce qui est autorisé
+
+Le scraping (lire automatiquement les pages d'un site) est **interdit par les conditions d'utilisation** de la plupart de ces sites, et peut mener à un blocage de ton IP ou à des poursuites. L'appli n'en fait donc pas. Voici ce qui est utilisé à la place :
+
+| Plateforme | Accès légal aux prix | Dans l'appli |
+| --- | --- | --- |
+| **eBay** | API officielle *Browse* (gratuite, clé développeur) : annonces en cours. Les ventes passées passent par une API restreinte (Marketplace Insights) | ✅ Intégré (`EBAY_CLIENT_ID`/`SECRET`) |
+| **Amazon** | Scraping interdit. **Keepa** (payant, données sous licence) ou l'API *Product Advertising* (compte Partenaires avec ventes régulières requis) | ✅ Keepa intégré (`KEEPA_API_KEY`) |
+| **Fnac** | Pas d'API publique. Flux produits via leur programme d'affiliation (Awin) | Lien de recherche + saisie manuelle |
+| **Rakuten** | Pas d'API publique de prix. Flux via le programme d'affiliation | Lien de recherche + saisie manuelle |
+| **Leboncoin** | Aucune API publique, scraping interdit par les CGU | Lien de recherche + saisie manuelle |
+| **Vinted** | Aucune API publique, scraping interdit par les CGU | Lien de recherche + saisie manuelle |
+| **Momox** | Pas d'API publique de rachat, scraping interdit | Lien vers leur estimation + saisie manuelle |
+| **Recyclivre** | Pas d'API publique | Lien de recherche + saisie manuelle |
+| **AbeBooks** | Programme d'affiliation (données sur demande) | Lien de recherche + saisie manuelle |
+
+Pour chaque livre, le bouton **« Ajouter un prix vu »** te permet d'enregistrer un prix que tu as constaté toi-même sur un site : il est pris en compte dans les calculs (médiane, fourchette…). Les boutons **« Vérifier sur … »** ouvrent la recherche du livre sur chaque site dans ton navigateur, ce qui est toujours autorisé.
+
+Pour tester l'interface sans aucune clé, mets `PRICE_DEMO_MODE=true` : l'appli génère des prix **faux** (stables pour un même ISBN), clairement signalés par un bandeau « Données de démonstration ».
+
+### Comment sont calculés les chiffres
+
+- **Prix médian** : médiane des prix d'occasion et des ventes (ou des prix neufs s'il n'y a rien d'autre).
+- **Fourchette de revente conseillée** : du 1er quartile à la médiane, pour vendre vite sans brader.
+- **Profit net estimé** : prix médian − commission (`RESALE_FEE_RATE`, 15 %) − frais fixes (`RESALE_FIXED_COST_CENTS`, 1,50 €).
+- **Prix d'achat max conseillé** : profit net ÷ (1 + `TARGET_ROI`). Avec `TARGET_ROI=1`, tu doubles ta mise. Si un site de rachat (Momox…) paie plus, c'est ce prix qui sert de plancher.
+- **Estimation selon l'état** : médiane × coefficient (Neuf 1,25 · Comme neuf 1,1 · Très bon 1 · Bon 0,85 · Correct 0,6).
+
+## Installation en local
+
+Prérequis : Node.js 20 ou plus, et Docker (pour la base de données) ou un PostgreSQL déjà installé.
 
 ```bash
+# 1. Installer les dépendances
+npm install
+
+# 2. Lancer PostgreSQL
+docker compose up -d
+
+# 3. Configurer
+cp .env.example .env
+# puis ouvre .env et remplis au minimum AUTH_SECRET et ANTHROPIC_API_KEY
+# (AUTH_SECRET : colle le résultat de `openssl rand -base64 32`)
+
+# 4. Créer les tables
+npm run db:migrate
+
+# 5. Démarrer
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Ouvre http://localhost:3000, clique sur **Créer un compte** (le premier compte est toujours accepté ; ensuite les inscriptions sont fermées sauf si `ALLOW_REGISTRATION=true`).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Tester
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm test          # tests automatiques (ISBN, calculs de prix, lecture des réponses des API…)
+npm run typecheck # vérification des types
+npm run lint
+```
 
-## Learn More
+Test manuel conseillé :
+1. Mets `PRICE_DEMO_MODE=true` dans `.env` et relance `npm run dev`.
+2. **Nouveau scan** → recherche l'ISBN `9781452151755` → la fiche du livre s'affiche avec des prix de démonstration.
+3. **Nouveau scan** → envoie une photo d'étagère → le statut passe à *En cours* puis *Terminé* (environ 30 s à 2 min selon le nombre de livres), les livres sont encadrés sur la photo.
+4. Ajoute un livre au stock, puis ouvre **Mon stock**.
 
-To learn more about Next.js, take a look at the following resources:
+## Variables d'environnement
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Toutes sont décrites dans [`.env.example`](.env.example).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Variable | Obligatoire | Rôle |
+| --- | --- | --- |
+| `DATABASE_URL` | oui | Connexion PostgreSQL |
+| `AUTH_SECRET` | oui | Signature des sessions (32 caractères min.) |
+| `ANTHROPIC_API_KEY` | oui pour les photos | Détection des livres par Claude |
+| `ANTHROPIC_MODEL` | non | Modèle Claude (défaut `claude-opus-5-5`) |
+| `GOOGLE_BOOKS_API_KEY` | conseillé | Évite le quota partagé de Google Books |
+| `ALLOW_REGISTRATION` | non | Autoriser d'autres inscriptions après le premier compte |
+| `INITIAL_CREDITS`, `CREDITS_PER_PHOTO` | non | Crédits offerts et coût d'une photo |
+| `STORAGE_DRIVER` | non | `local` ou `s3` |
+| `LOCAL_UPLOAD_DIR` | non | Dossier des photos en mode local |
+| `S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | si `s3` | Stockage S3 ou compatible |
+| `PRICE_CACHE_TTL_HOURS` | non | Durée du cache des prix |
+| `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET` | non | API eBay Browse |
+| `KEEPA_API_KEY` | non | Prix Amazon via Keepa |
+| `PRICE_DEMO_MODE` | non | Prix factices pour tester |
+| `RESALE_FEE_RATE`, `RESALE_FIXED_COST_CENTS`, `TARGET_ROI` | non | Paramètres de rentabilité |
+| `CRON_SECRET` | en production | Protège la route `/api/cron` |
 
-## Deploy on Vercel
+## Déployer (étape suivante)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Le plus simple : **Vercel** + une base **Neon** (PostgreSQL gratuit) + **Cloudflare R2** pour les photos.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Crée une base sur Neon et copie son URL dans `DATABASE_URL`.
+2. Crée un bucket R2 et renseigne `STORAGE_DRIVER=s3` et les variables `S3_*` (sur Vercel le disque n'est pas permanent : le stockage local ne marche pas).
+3. Importe le dépôt sur Vercel, ajoute les variables d'environnement, dont `CRON_SECRET`.
+4. Lance `npx prisma migrate deploy` avec l'URL de production (ou ajoute-le à la commande de build).
+
+Le fichier `vercel.json` programme `/api/cron` toutes les 10 minutes pour reprendre les scans interrompus. Le traitement d'un scan peut durer quelques minutes : un plan Vercel qui autorise 300 s par fonction est recommandé si tu envoies beaucoup de photos d'un coup.
+
+## Organisation du code
+
+```
+prisma/schema.prisma        schéma de la base
+src/lib/vision.ts           détection des livres par Claude
+src/lib/books.ts            Google Books / Open Library
+src/lib/catalog.ts          enregistrement des livres + cache des recherches
+src/lib/prices/             sources de prix, plateformes, calculs, cache
+src/lib/scan-processor.ts   traitement asynchrone d'un scan
+src/lib/i18n/               textes FR / EN
+src/app/(app)/              pages (dashboard, scans, prix, stock, listes, badges, profil)
+src/app/api/                envoi des photos, statut, photos, identification, cron
+src/app/actions.ts          actions serveur (favoris, stock, listes, notes…)
+scripts/worker.ts           worker en ligne de commande
+```
+
+## Pistes pour la suite
+
+- Application mobile (React Native / Expo) qui réutilise les mêmes routes API.
+- Historique des prix dans le temps (graphique, « calendrier des ventes »).
+- Flux d'affiliation Fnac / Rakuten / AbeBooks si tu t'inscris à leurs programmes.
+- Pages Tarifs, Guide, Contact.

@@ -1,0 +1,212 @@
+// Schéma de la base de données (PostgreSQL via Prisma).
+// Les prix sont stockés en centimes (Int) pour éviter les erreurs d'arrondi.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ScanStatus {
+  PENDING
+  PROCESSING
+  DONE
+  ERROR
+}
+
+enum ScanKind {
+  PHOTO
+  BARCODE
+}
+
+enum OfferType {
+  NEW
+  USED
+  BUYBACK
+  SOLD
+}
+
+enum BookCondition {
+  NEW
+  LIKE_NEW
+  VERY_GOOD
+  GOOD
+  ACCEPTABLE
+}
+
+enum StockStatus {
+  IN_STOCK
+  LISTED
+  SOLD
+}
+
+model User {
+  id           String         @id @default(cuid())
+  email        String         @unique
+  passwordHash String
+  name         String?
+  locale       String         @default("fr")
+  credits      Int            @default(100)
+  createdAt    DateTime       @default(now())
+  scans        Scan[]
+  stockItems   StockItem[]
+  lists        ShoppingList[]
+}
+
+model Scan {
+  id           String        @id @default(cuid())
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  kind         ScanKind      @default(PHOTO)
+  status       ScanStatus    @default(PENDING)
+  bookLanguage String        @default("fr")
+  country      String        @default("FR")
+  favorite     Boolean       @default(false)
+  error        String?
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  createdAt    DateTime      @default(now())
+  photos       Photo[]
+  detections   Detection[]
+
+  @@index([userId, createdAt])
+  @@index([status])
+}
+
+model Photo {
+  id         String      @id @default(cuid())
+  scanId     String
+  scan       Scan        @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  storageKey String
+  mimeType   String
+  width      Int?
+  height     Int?
+  position   Int         @default(0)
+  createdAt  DateTime    @default(now())
+  detections Detection[]
+}
+
+/// Un livre repéré dans un scan (tranche sur une photo, ou code-barres saisi).
+model Detection {
+  id         String   @id @default(cuid())
+  scanId     String
+  scan       Scan     @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  photoId    String?
+  photo      Photo?   @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  bookId     String?
+  book       Book?    @relation(fields: [bookId], references: [id], onDelete: SetNull)
+  rawTitle   String?
+  rawAuthor  String?
+  spineText  String?
+  /// Boîte englobante normalisée {x, y, w, h} entre 0 et 1 (relative à la photo).
+  bbox       Json?
+  confidence String?
+  note       String?
+  createdAt  DateTime @default(now())
+
+  @@index([scanId])
+}
+
+model Book {
+  id            String              @id @default(cuid())
+  isbn13        String?             @unique
+  isbn10        String?
+  title         String
+  authors       String[]
+  publisher     String?
+  publishedDate String?
+  language      String?
+  pageCount     Int?
+  coverUrl      String?
+  listPriceCents Int?
+  source        String
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  detections    Detection[]
+  prices        PriceSnapshot[]
+  fetches       PriceFetch[]
+  stockItems    StockItem[]
+  listItems     ShoppingListItem[]
+}
+
+/// Cache des recherches titre/auteur -> livre, pour éviter de rappeler Google Books.
+model LookupCache {
+  key       String   @id
+  bookId    String?
+  createdAt DateTime @default(now())
+}
+
+/// Une offre ou un prix observé pour un livre sur une plateforme.
+model PriceSnapshot {
+  id         String         @id @default(cuid())
+  bookId     String
+  book       Book           @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  platform   String
+  offerType  OfferType
+  condition  BookCondition?
+  priceCents Int
+  currency   String         @default("EUR")
+  country    String         @default("FR")
+  url        String?
+  /// "api", "manual" (saisi par toi) ou "demo" (données factices)
+  source     String
+  observedAt DateTime       @default(now())
+
+  @@index([bookId, platform])
+}
+
+/// Trace du dernier appel à une source de prix (même s'il n'a rien renvoyé) : c'est le cache.
+model PriceFetch {
+  id        String   @id @default(cuid())
+  bookId    String
+  book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  provider  String
+  country   String
+  fetchedAt DateTime @default(now())
+  ok        Boolean
+  error     String?
+
+  @@unique([bookId, provider, country])
+}
+
+model StockItem {
+  id                 String        @id @default(cuid())
+  userId             String
+  user               User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookId             String
+  book               Book          @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  condition          BookCondition @default(GOOD)
+  status             StockStatus   @default(IN_STOCK)
+  purchasePriceCents Int?
+  soldPriceCents     Int?
+  note               String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  @@index([userId])
+}
+
+model ShoppingList {
+  id        String             @id @default(cuid())
+  userId    String
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime           @default(now())
+  items     ShoppingListItem[]
+}
+
+model ShoppingListItem {
+  id        String       @id @default(cuid())
+  listId    String
+  list      ShoppingList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  bookId    String
+  book      Book         @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  note      String?
+  createdAt DateTime     @default(now())
+
+  @@unique([listId, bookId])
+}
