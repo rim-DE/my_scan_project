@@ -44,6 +44,7 @@ export const en: Dict = {
     confirmDelete: "Delete this scan?",
   },
   status: {
+    UPLOADING: "Uploading photos",
     PENDING: "Queued",
     PROCESSING: "Processing",
     DONE: "Done",

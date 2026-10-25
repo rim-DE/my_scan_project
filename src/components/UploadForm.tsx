@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import { MAX_REQUEST_BYTES, shrinkPhoto } from "@/lib/client-image";
 
 const LANGUAGES = [
   { code: "fr", flag: "🇫🇷" },
@@ -9,6 +10,13 @@ const LANGUAGES = [
   { code: "de", flag: "🇩🇪" },
   { code: "es", flag: "🇪🇸" },
 ];
+
+async function postJson(url: string, body: unknown): Promise<{ id: string }> {
+  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error ?? "Erreur");
+  return json;
+}
 
 interface Props {
   t: { dropTitle: string; dropHint: string; dropFormats: string; bookLanguage: string; scanName: string; launch: string; sending: string; noFiles: string };
@@ -23,6 +31,8 @@ export function UploadForm({ t }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
+  const [startedId, setStartedId] = useState<string | null>(null);
 
   function addFiles(list: FileList | null) {
     if (!list) return;
@@ -33,16 +43,39 @@ export function UploadForm({ t }: Props) {
     if (files.length === 0) return setError(t.noFiles);
     setSending(true);
     setError(null);
-    const fd = new FormData();
-    files.forEach((f) => fd.append("photos", f));
-    fd.append("language", language);
-    fd.append("name", name);
-    const res = await fetch("/api/scans", { method: "POST", body: fd });
-    const json = await res.json().catch(() => ({}));
-    setSending(false);
-    if (!res.ok) return setError(json.error ?? "Erreur");
-    router.push(`/scans/${json.id}`);
-    router.refresh();
+    try {
+      // 1. Création du scan, 2. une requête par photo (réduite avant l'envoi), 3. lancement du traitement.
+      const created = await postJson("/api/scans", { name, language, photos: files.length });
+      const failures: string[] = [];
+      for (const [position, file] of files.entries()) {
+        setProgress(`${position + 1}/${files.length}`);
+        const photo = await shrinkPhoto(file);
+        if (photo.size > MAX_REQUEST_BYTES) {
+          failures.push(`${file.name} : photo trop lourde, convertis-la en JPEG.`);
+          continue;
+        }
+        const fd = new FormData();
+        fd.append("photo", photo, file.name);
+        fd.append("filename", file.name);
+        fd.append("position", String(position));
+        const res = await fetch(`/api/scans/${created.id}/photos`, { method: "POST", body: fd });
+        if (!res.ok) failures.push((await res.json().catch(() => ({}))).error ?? file.name);
+      }
+      await postJson(`/api/scans/${created.id}/start`, {});
+      if (failures.length) {
+        // On reste sur la page pour que l'erreur soit lue ; le scan des autres photos est lancé.
+        setError(failures.join(" · "));
+        setStartedId(created.id);
+        return;
+      }
+      router.push(`/scans/${created.id}`);
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erreur");
+    } finally {
+      setSending(false);
+      setProgress(null);
+    }
   }
 
   return (
@@ -102,9 +135,16 @@ export function UploadForm({ t }: Props) {
       </div>
 
       {error && <p className="text-center text-sm text-red-600">{error}</p>}
+      {startedId && (
+        <p className="text-center text-sm">
+          <a className="text-brand underline" href={`/scans/${startedId}`}>
+            Voir le scan des autres photos
+          </a>
+        </p>
+      )}
       <div className="text-center">
         <button className="btn-primary px-6 py-3 text-base" onClick={submit} disabled={sending}>
-          {sending ? t.sending : t.launch}
+          {sending ? `${t.sending} ${progress ?? ""}` : t.launch}
         </button>
       </div>
     </div>

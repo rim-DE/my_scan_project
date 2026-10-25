@@ -122,7 +122,8 @@ Toutes sont décrites dans [`.env.example`](.env.example).
 | `GOOGLE_BOOKS_API_KEY` | conseillé | Évite le quota partagé de Google Books |
 | `ALLOW_REGISTRATION` | non | Autoriser d'autres inscriptions après le premier compte |
 | `INITIAL_CREDITS`, `CREDITS_PER_PHOTO` | non | Crédits offerts et coût d'une photo |
-| `STORAGE_DRIVER` | non | `local` ou `s3` |
+| `STORAGE_DRIVER` | non | `local`, `blob` ou `s3` (par défaut : `blob` si `BLOB_READ_WRITE_TOKEN` existe, sinon `local`) |
+| `BLOB_READ_WRITE_TOKEN` | si `blob` | Ajouté automatiquement par Vercel quand un magasin Blob est relié au projet |
 | `LOCAL_UPLOAD_DIR` | non | Dossier des photos en mode local |
 | `S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | si `s3` | Stockage S3 ou compatible |
 | `PRICE_CACHE_TTL_HOURS` | non | Durée du cache des prix |
@@ -132,16 +133,24 @@ Toutes sont décrites dans [`.env.example`](.env.example).
 | `RESALE_FEE_RATE`, `RESALE_FIXED_COST_CENTS`, `TARGET_ROI` | non | Paramètres de rentabilité |
 | `CRON_SECRET` | en production | Protège la route `/api/cron` |
 
-## Déployer (étape suivante)
+## Déployer
 
-Le plus simple : **Vercel** + une base **Neon** (PostgreSQL gratuit) + **Cloudflare R2** pour les photos.
+**Vercel** (hébergement) + **Neon** (PostgreSQL gratuit) + **Vercel Blob** (photos, 1 Go gratuit).
 
-1. Crée une base sur Neon et copie son URL dans `DATABASE_URL`.
-2. Crée un bucket R2 et renseigne `STORAGE_DRIVER=s3` et les variables `S3_*` (sur Vercel le disque n'est pas permanent : le stockage local ne marche pas).
-3. Importe le dépôt sur Vercel, ajoute les variables d'environnement, dont `CRON_SECRET`.
-4. Lance `npx prisma migrate deploy` avec l'URL de production (ou ajoute-le à la commande de build).
+1. **Neon** : crée un projet (région Europe). Dans « Connect », désactive *Connection pooling* puis copie l'adresse dans `DATABASE_URL` (les migrations Prisma ont besoin d'une connexion directe).
+2. **Vercel** : importe le dépôt GitHub, ajoute les variables d'environnement (`DATABASE_URL`, `AUTH_SECRET`, `ANTHROPIC_API_KEY`, `CRON_SECRET`, et si tu les as `GOOGLE_BOOKS_API_KEY`, `EBAY_*`, `KEEPA_API_KEY`), puis déploie. Pour `AUTH_SECRET` et `CRON_SECRET` : `openssl rand -base64 32`.
+3. **Photos** : dans le projet Vercel, onglet *Storage* → *Create* → *Blob*, accès **Private**, relié au projet. Vercel ajoute tout seul `BLOB_READ_WRITE_TOKEN`, et l'appli l'utilise dès qu'il est présent. Redéploie ensuite (*Deployments* → *Redeploy*). Sur Vercel le disque n'est pas permanent : le stockage local ne marche pas.
+4. Ouvre l'adresse donnée par Vercel et crée ton compte (le premier compte peut toujours s'inscrire).
 
-Le fichier `vercel.json` programme `/api/cron` toutes les 10 minutes pour reprendre les scans interrompus. Le traitement d'un scan peut durer quelques minutes : un plan Vercel qui autorise 300 s par fonction est recommandé si tu envoies beaucoup de photos d'un coup.
+Plutôt un stockage S3 (Cloudflare R2, Scaleway…) ? Crée un bucket et une clé « lecture/écriture », puis renseigne `STORAGE_DRIVER=s3` et les variables `S3_*` (pour R2 : `S3_REGION=auto`, `S3_ENDPOINT=https://<id-de-compte>.r2.cloudflarestorage.com`).
+
+Rien d'autre à lancer : Vercel utilise le script `vercel-build`, qui applique les migrations (`prisma migrate deploy`) avant chaque build.
+
+Points propres à Vercel :
+
+- **Taille des envois** : Vercel refuse les requêtes de plus de 4,5 Mo. Le navigateur réduit donc chaque photo (taille lue par le modèle, environ 1 Mo en JPEG) et l'envoie seule : `POST /api/scans` crée le scan, `POST /api/scans/[id]/photos` ajoute une photo, `POST /api/scans/[id]/start` lance le traitement.
+- **Cron** : la formule gratuite (Hobby) n'autorise qu'un passage par jour, donc `vercel.json` appelle `/api/cron` à 4 h (UTC). Avec Vercel Pro, remets `*/10 * * * *` pour reprendre les scans interrompus toutes les 10 minutes.
+- **Durée** : le traitement d'un scan tourne jusqu'à 300 s par fonction. Au-delà (beaucoup de photos d'un coup), le cron reprend le scan.
 
 ## Organisation du code
 

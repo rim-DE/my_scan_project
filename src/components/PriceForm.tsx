@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { shrinkPhoto } from "@/lib/client-image";
 
 const CONDITIONS = ["NEW", "LIKE_NEW", "VERY_GOOD", "GOOD", "ACCEPTABLE"] as const;
 
@@ -25,7 +26,7 @@ export function PriceForm({ initial, t, conditions }: Props) {
     if (file && !isbn) {
       setBusy(true);
       const fd = new FormData();
-      fd.append("photo", file);
+      fd.append("photo", await shrinkPhoto(file), file.name);
       const res = await fetch("/api/identify", { method: "POST", body: fd });
       const json = await res.json().catch(() => ({}));
       setBusy(false);
