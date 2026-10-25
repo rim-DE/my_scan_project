@@ -5,14 +5,17 @@ import type { Dict } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n";
 import type { DetectionView } from "@/lib/queries";
 import { formatPrice } from "@/lib/money";
-import { PLATFORMS, platformName } from "@/lib/prices/platforms";
+import { PLATFORM_BY_ID, PLATFORMS, platformName } from "@/lib/prices/platforms";
 import { addManualPriceAction, addToListAction, addToStockAction, deletePriceAction, refreshPricesAction, saveNoteAction } from "@/app/actions";
 import { shortAge } from "@/lib/prices/metrics";
 import { SpineImage } from "./SpineImage";
+import { BooksIcon, LocationView, LocateIcon, MoreIcon, SalesHistory, Sheet, SiteLogo, SitesSheet, type PhotoInfo } from "./BookPanels";
 
 interface Props {
   detection: DetectionView;
   photo?: { url: string; width: number; height: number } | null;
+  /** Toutes les photos du scan, pour la vue « emplacement » (bouton « Charger toutes les images »). */
+  photos?: PhotoInfo[];
   t: Dict;
   country: string;
   lists: { id: string; name: string }[];
@@ -28,8 +31,9 @@ interface Props {
 
 const CONDITIONS = ["NEW", "LIKE_NEW", "VERY_GOOD", "GOOD", "ACCEPTABLE"] as const;
 
-export function BookCard({ detection, photo, t, country, lists, path, locale, canNote = true, selected = false, onShowOnPhoto }: Props) {
+export function BookCard({ detection, photo, photos = [], t, country, lists, path, locale, canNote = true, selected = false, onShowOnPhoto }: Props) {
   const [panel, setPanel] = useState<null | "stock" | "list" | "note" | "price">(null);
+  const [sheet, setSheet] = useState<null | "locate" | "history" | "more">(null);
   const [note, setNote] = useState(detection.note ?? "");
   const [pending, start] = useTransition();
   const b = detection.book;
@@ -46,14 +50,45 @@ export function BookCard({ detection, photo, t, country, lists, path, locale, ca
       onClick={onShowOnPhoto}
     />
   );
+  const canLocate = !!photo && !!(detection.polygon || detection.bbox);
+  const iconBtn = "grid h-10 w-10 place-items-center rounded-full text-brand hover:bg-mint";
+  const icons = (
+    <div className="flex shrink-0 flex-col gap-1">
+      {canLocate && (
+        <button className={iconBtn} onClick={() => setSheet("locate")} title={t.book.locate} aria-label={t.book.locate}>
+          <LocateIcon />
+        </button>
+      )}
+      {b && (
+        <>
+          <button className={iconBtn} onClick={() => setSheet("history")} title={t.book.salesHistory} aria-label={t.book.salesHistory}>
+            <BooksIcon />
+          </button>
+          <button className={iconBtn} onClick={() => setSheet("more")} title={t.book.moreTitle} aria-label={t.book.moreTitle}>
+            <MoreIcon />
+          </button>
+        </>
+      )}
+    </div>
+  );
+  const close = () => setSheet(null);
+  const locateSheet = sheet === "locate" && (
+    <Sheet title={t.book.locate} onClose={close} closeLabel={t.common.close}>
+      <LocationView detection={detection} photos={photos.length ? photos : photo && detection.photoId ? [{ id: detection.photoId, ...photo }] : []} t={t} />
+    </Sheet>
+  );
 
   if (!b) {
     return (
-      <article id={detection.id} className={`card space-y-2 opacity-80 ${ring}`}>
-        {spine}
+      <article id={detection.id} className={`card space-y-2 ${ring}`}>
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1 opacity-80">{spine}</div>
+          {icons}
+        </div>
         <p className="text-xs font-semibold uppercase text-red-600">{t.scan.unidentified}</p>
         <p className="font-medium">{detection.rawTitle}</p>
         {detection.rawAuthor && <p className="text-sm text-slate-500">{detection.rawAuthor}</p>}
+        {locateSheet}
       </article>
     );
   }
@@ -99,23 +134,35 @@ export function BookCard({ detection, photo, t, country, lists, path, locale, ca
             </p>
             <p className="font-semibold">{m.sales12m !== null ? fmt(t.book.salesYear, { n: m.sales12m }) : t.book.salesUnknown}</p>
             {m.currentPriceCents !== null && (
-              <p className="text-xs">
-                {amazonMin?.url ? (
-                  <a href={amazonMin.url} target="_blank" rel="noopener noreferrer" className="underline">
-                    Amazon · {fmt(t.book.currentlySold, { price: fp(amazonMin.priceCents, amazonMin.currency), n: amazon.length })}
-                  </a>
-                ) : (
-                  fmt(t.book.currentlySold, { price: fp(m.currentPriceCents), n: m.currentOfferCount })
-                )}
+              <p className="flex items-center gap-1.5 text-xs">
+                <SiteLogo id="amazon" color="#ff9900" size={18} />
+                <a
+                  href={amazonMin?.url ?? PLATFORM_BY_ID.amazon.searchUrl({ isbn13: b.isbn13 ?? "", title: b.title })}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline"
+                >
+                  {amazonMin
+                    ? fmt(t.book.currentlySold, { price: fp(amazonMin.priceCents, amazonMin.currency), n: amazon.length })
+                    : fmt(t.book.currentlySold, { price: fp(m.currentPriceCents), n: m.currentOfferCount })}
+                </a>
               </p>
             )}
             {buyback && (
-              <p className="text-xs text-green-700">
-                {fmt(t.book.buybackAgo, {
-                  platform: platformName(buyback.platform),
-                  price: fp(buyback.priceCents, buyback.currency),
-                  age: shortAge(buyback.observedAt, new Date(), locale),
-                })}
+              <p className="flex items-center gap-1.5 text-xs">
+                <SiteLogo id={buyback.platform} color={PLATFORM_BY_ID[buyback.platform]?.color ?? "#56b146"} size={18} />
+                <a
+                  href={buyback.url ?? PLATFORM_BY_ID[buyback.platform]?.searchUrl({ isbn13: b.isbn13 ?? "", title: b.title })}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-green-700 underline"
+                >
+                  {fmt(t.book.buybackAgo, {
+                    platform: platformName(buyback.platform).toLowerCase(),
+                    price: fp(buyback.priceCents, buyback.currency),
+                    age: shortAge(buyback.observedAt, new Date(), locale),
+                  })}
+                </a>
               </p>
             )}
             <p className="flex flex-wrap gap-x-4 text-xs text-slate-500">
@@ -139,7 +186,8 @@ export function BookCard({ detection, photo, t, country, lists, path, locale, ca
           </div>
         </div>
 
-        <div className="min-w-0 space-y-3">
+        <div className="flex min-w-0 items-start gap-2">
+        <div className="min-w-0 flex-1 space-y-3">
           {spine}
           {m.lastSales.length > 0 ? (
             <div className="overflow-x-auto">
@@ -167,6 +215,8 @@ export function BookCard({ detection, photo, t, country, lists, path, locale, ca
           ) : (
             <p className="text-xs text-slate-500">{t.book.noSales}</p>
           )}
+        </div>
+        {icons}
         </div>
       </div>
 
@@ -212,25 +262,6 @@ export function BookCard({ detection, photo, t, country, lists, path, locale, ca
             </tbody>
           </table>
         </details>
-      )}
-
-      {b.isbn13 && (
-        <div className="flex flex-wrap gap-2">
-          <span className="self-center text-xs text-slate-500">{t.book.checkOn} :</span>
-          {PLATFORMS.map((p) => (
-            <a
-              key={p.id}
-              href={p.searchUrl({ isbn13: b.isbn13!, title: b.title })}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="chip hover:bg-mint"
-              style={{ borderColor: p.color }}
-              title={p.access}
-            >
-              {p.name}
-            </a>
-          ))}
-        </div>
       )}
 
       {detection.note && panel !== "note" && <p className="rounded-xl bg-mint px-3 py-2 text-sm">📝 {detection.note}</p>}
@@ -307,6 +338,41 @@ export function BookCard({ detection, photo, t, country, lists, path, locale, ca
           <button className="btn-primary">{t.common.save}</button>
         </form>
       )}
+
+      {locateSheet}
+      {sheet === "history" && (
+        <Sheet title={t.book.salesHistory} onClose={close} closeLabel={t.common.close}>
+          <SalesHistory book={b} t={t} locale={locale} />
+        </Sheet>
+      )}
+      {sheet === "more" && (
+        <Sheet title={b.title} onClose={close} closeLabel={t.common.close}>
+          <SitesSheet
+            book={b}
+            t={t}
+            locale={locale}
+            refreshing={pending}
+            onRefresh={() => start(() => refreshPricesAction(b.id, country, path))}
+            actions={[
+              ...(b.isbn13
+                ? [{ label: t.book.actionInfo, icon: "ℹ️", onClick: () => window.open(`https://books.google.com/books?vid=ISBN${b.isbn13}`, "_blank", "noopener") }]
+                : []),
+              { label: t.book.actionChart, icon: "📈", onClick: () => setSheet("history") },
+              { label: t.book.actionShare, icon: "📤", onClick: () => share(b.title, b.isbn13) },
+              { label: t.book.actionList, icon: "🛒", onClick: () => { setSheet(null); setPanel("list"); } },
+              { label: t.book.actionStock, icon: "📦", onClick: () => { setSheet(null); setPanel("stock"); } },
+              ...(canNote ? [{ label: t.book.actionNote, icon: "📝", onClick: () => { setSheet(null); setPanel("note"); } }] : []),
+            ]}
+          />
+        </Sheet>
+      )}
     </article>
   );
+}
+
+/** Partage du livre (feuille de partage du téléphone, sinon copie dans le presse-papier). */
+function share(title: string, isbn13: string | null) {
+  const text = isbn13 ? `${title} — ISBN ${isbn13}` : title;
+  if (navigator.share) navigator.share({ title, text }).catch(() => {});
+  else navigator.clipboard?.writeText(text).catch(() => {});
 }

@@ -4,6 +4,7 @@
 import { spineFrame, spineTransform, type Point, type TextDirection } from "./geometry";
 import type { BookMetrics } from "./prices/metrics";
 import type { PriceStats } from "./prices/stats";
+import { PLATFORMS, type SiteLink } from "./prices/platforms";
 
 export interface ReportBook {
   rawTitle: string;
@@ -24,6 +25,10 @@ export interface ReportBook {
   metrics: BookMetrics | null;
   buyback: { platform: string; priceCents: number; observedAt: string } | null;
   amazon: { priceCents: number; count: number; url: string | null } | null;
+  /** Meilleure offre Amazon connue, pour la carte façon « Buy Box » de la fenêtre « … ». */
+  amazonBest: { offerType: string; priceCents: number; observedAt: string; url: string | null } | null;
+  /** Liens vers les annonces du livre sur chaque site (fenêtre « … »), avec le meilleur prix connu. */
+  sites: SiteLink[];
   /** Prix inventés (mode démo) : à ne jamais prendre pour des vrais prix. */
   demo: boolean;
 }
@@ -49,7 +54,8 @@ export function renderReport(data: ReportData): string {
       spine: { w: Math.round(f.length * scale), h: Math.round(f.thickness * scale), t: spineTransform(f, scale) },
     };
   });
-  const json = JSON.stringify({ ...data, books }).replace(/</g, "\\u003c");
+  const names = Object.fromEntries(PLATFORMS.map((p) => [p.id, p.name]));
+  const json = JSON.stringify({ ...data, books, names }).replace(/</g, "\\u003c");
   const title = escapeHtml(data.name);
 
   return `<!doctype html>
@@ -103,6 +109,47 @@ th{text-align:left;padding:4px 10px 4px 0;color:var(--muted);white-space:nowrap}
 td{padding:4px 8px;text-align:center;border-left:1px solid var(--line)}
 tr:first-child td,tr:first-child th{border-bottom:1px solid var(--line)}
 .unid{color:var(--red);font-size:12px;font-weight:700;text-transform:uppercase}
+.rightwrap{display:flex;gap:8px;align-items:flex-start;min-width:0}
+.rightwrap .right{flex:1}
+.icons{display:flex;flex-direction:column;gap:4px;flex:none}
+.ib{width:40px;height:40px;border-radius:999px;border:0;background:none;color:var(--brand);display:grid;place-items:center;cursor:pointer}
+.ib:hover{background:var(--bg)}
+.logo{display:inline-grid;place-items:center;border-radius:6px;color:#fff;font-weight:700;flex:none;vertical-align:middle}
+.lline{display:flex;align-items:center;gap:6px}
+.lline a{color:inherit}
+.lline.ok a{color:#15803d}
+dialog{border:0;padding:0;background:transparent;max-width:none;max-height:none;width:100%;height:100%}
+dialog::backdrop{background:rgba(0,0,0,.5)}
+.sheet{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:min(680px,100%);max-height:92vh;overflow-y:auto;background:var(--card);color:var(--ink);border-radius:24px 24px 0 0;padding:16px;box-shadow:0 -4px 30px rgba(0,0,0,.25)}
+@media (min-width:640px){.sheet{bottom:auto;top:50%;transform:translate(-50%,-50%);border-radius:24px}}
+.sheethead{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
+.sheethead h2{font-size:18px;margin:0}
+.locphoto{position:relative;width:fit-content;max-width:100%;margin:0 auto}
+.locphoto img{display:block;max-width:100%;max-height:58vh;border-radius:16px}
+.locphoto svg{position:absolute;inset:0;width:100%;height:100%}
+.locphoto polygon{animation:blink 1s ease-in-out infinite}
+.ring{position:absolute;width:56px;height:56px;margin:-28px 0 0 -28px;border:4px solid #d946ef;border-radius:50%;pointer-events:none}
+.ring.ping{animation:ping 1.1s cubic-bezier(0,0,.2,1) infinite}
+@keyframes ping{75%,100%{transform:scale(2);opacity:0}}
+@keyframes blink{50%{opacity:.35}}
+.pager{position:absolute;right:12px;bottom:12px;background:rgba(0,0,0,.6);color:#fff;border-radius:999px;padding:2px 12px;font-size:13px}
+.locmeta{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:14px;margin:10px 0;color:var(--muted)}
+.bigspine{display:block;max-width:100%;height:auto;max-height:64px;margin:0 auto;border-radius:6px;border:1px solid var(--line)}
+.isbns{text-align:center;font-weight:600;margin:8px 0 0}
+.sites{display:flex;gap:4px;overflow-x:auto;padding-bottom:8px}
+.site{display:flex;flex-direction:column;align-items:center;gap:4px;width:80px;flex:none;padding:8px 4px;border-radius:16px;text-align:center;font-size:11px;line-height:1.2;color:var(--ink);text-decoration:none;background:none;border:0;cursor:pointer;font-family:inherit}
+.site:hover{background:var(--bg)}
+.site b{font-size:12px}
+.site .act{width:40px;height:40px;border-radius:50%;background:var(--bg);display:grid;place-items:center;font-size:19px}
+.buybox{border:1px solid var(--line);border-radius:16px;padding:14px;margin-top:8px}
+.buybox h3{display:flex;align-items:center;gap:8px;margin:0 0 8px;font-size:16px}
+.buybox .big{font-size:26px;font-weight:800;margin:2px 0}
+.buybox a.tag{color:var(--brand)}
+.tag{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:1px 10px;font-size:12px;margin-right:6px}
+.chart{width:100%;height:auto}
+.hist{width:100%}
+.hist td,.hist th{border:0;text-align:left;padding:4px 6px;border-top:1px solid var(--line)}
+.hist td:last-child{text-align:right;font-weight:600}
 @media (max-width:720px){.book{grid-template-columns:1fr}.cover{width:84px;height:120px}}
 </style>
 </head>
@@ -126,6 +173,7 @@ tr:first-child td,tr:first-child th{border-bottom:1px solid var(--line)}
 </section>
 <section class="card" id="list" aria-label="Livres détectés"></section>
 </main>
+<dialog id="dlg" aria-labelledby="dlgtitle"><div class="sheet" id="sheet"><div class="sheethead"><h2 id="dlgtitle"></h2><button class="btn" id="dlgclose" aria-label="Fermer">✕</button></div><div id="dlgbody"></div></div></dialog>
 <script type="application/json" id="data">${json}</script>
 <script>
 (function(){
@@ -135,6 +183,12 @@ var sel=null,sort="profit30",q="";
 var eur=function(c){return c==null?"—":new Intl.NumberFormat("fr-FR",{style:"currency",currency:"EUR",maximumFractionDigits:c%100===0?0:2}).format(c/100);};
 var esc=function(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"&quot;","'":"&#39;"}[c];});};
 function age(iso){var d=Math.max(0,Math.floor((Date.now()-new Date(iso).getTime())/864e5));if(d<1){var h=Math.floor((Date.now()-new Date(iso).getTime())/36e5);return h+"h";}if(d<30)return d+"j";var m=Math.floor(d/30.44);if(m<12)return m+"m";var y=Math.floor(m/12),r=m%12;return r?y+"a "+r+"m":y+"a";}
+var SV='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
+var IC={loc:SV+'<path d="M12 2v6M9.5 4.5 12 2l2.5 2.5M12 22v-6M9.5 19.5 12 22l2.5-2.5M2 12h6M4.5 9.5 2 12l2.5 2.5M22 12h-6M19.5 9.5 22 12l-2.5 2.5"/></svg>',hist:SV+'<rect x="3" y="4" width="4" height="16" rx="1"/><rect x="8.5" y="6" width="4" height="14" rx="1"/><path d="m14.5 7.2 3.8-1.1 3.4 12.8-3.8 1.1z"/></svg>',more:SV+'<circle cx="5" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="19" cy="12" r="1.3" fill="currentColor"/></svg>'};
+var INI={chasseauxlivres:"CL",ebay:"eb",fnac:"F",rakuten:"R",vinted:"V",leboncoin:"lbc",momox:"m",recyclivre:"Rc",abebooks:"A",keepa:"K"};
+var COLORS={amazon:"#ff9900",momox:"#56b146"};
+function logo(id,color,size){if(id==="amazon")return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" aria-hidden="true" style="flex:none"><rect width="24" height="24" rx="6" fill="#232f3e"/><text x="12" y="14.5" text-anchor="middle" font-size="13" font-weight="700" fill="#fff" font-family="Arial,sans-serif">a</text><path d="M6.5 16.5q5.5 3 11 0" stroke="#ff9900" stroke-width="1.6" fill="none" stroke-linecap="round"/><path d="m16 15.4 1.8 1-1.2 1.6" stroke="#ff9900" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';var t=INI[id]||String(id).charAt(0).toUpperCase();return '<span class="logo" aria-hidden="true" style="background:'+(color||COLORS[id]||"#64748b")+';width:'+size+'px;height:'+size+'px;font-size:'+Math.round(size*(t.length>2?.36:.5))+'px">'+esc(t)+'</span>';}
+function siteUrl(b,id){var s=(b.sites||[]).filter(function(x){return x.id===id;})[0];return s?s.url:null;}
 document.getElementById("meta").textContent=new Date(D.createdAt).toLocaleString("fr-FR")+" · 1 photo · "+books.length+" livres";
 document.getElementById("notes").innerHTML=D.notes.map(function(n){return "<p>"+esc(n)+"</p>";}).join("");
 var img=document.getElementById("img");img.src=D.photo.dataUrl;
@@ -160,18 +214,23 @@ function card(b){
     h+='<p>Prix médian de ventes : <b>'+eur(s.medianCents)+'</b></p>';
     h+='<p>Prix maximum d\\'achat conseillé : <b>'+eur(s.maxBuyCents)+'</b></p>';
     h+='<p><b>'+(m.sales12m==null?'Ventes inconnues':m.sales12m+' vente'+(m.sales12m>1?'s':'')+' sur 12 mois')+'</b></p>';
-    if(b.amazon)h+='<p class="small">'+(b.amazon.url?'<a href="'+esc(b.amazon.url)+'" target="_blank" rel="noopener">':'')+'Amazon : actuellement vendu à '+eur(b.amazon.priceCents)+' · '+b.amazon.count+' offre'+(b.amazon.count>1?'s':'')+(b.amazon.url?'</a>':'')+'</p>';
-    else if(m.currentPriceCents!=null)h+='<p class="small">Actuellement vendu à '+eur(m.currentPriceCents)+' · '+m.currentOfferCount+' offre(s)</p>';
-    if(b.buyback)h+='<p class="small ok">'+esc(b.buyback.platform)+' rachetait à '+eur(b.buyback.priceCents)+' il y a '+age(b.buyback.observedAt)+'</p>';
+    var au=(b.amazon&&b.amazon.url)||siteUrl(b,"amazon");
+    var atxt=b.amazon?'Actuellement vendu à '+eur(b.amazon.priceCents)+' · '+b.amazon.count+' offre'+(b.amazon.count>1?'s':''):m.currentPriceCents!=null?'Actuellement vendu à '+eur(m.currentPriceCents)+' · '+m.currentOfferCount+' offre(s)':null;
+    if(atxt)h+='<p class="small lline">'+logo("amazon",null,18)+(au?'<a href="'+esc(au)+'" target="_blank" rel="noopener">'+atxt+'</a>':atxt)+'</p>';
+    if(b.buyback){var bu=siteUrl(b,b.buyback.platform);var btxt=esc(String(b.buyback.platform).toLowerCase())+' rachetait à '+eur(b.buyback.priceCents)+' il y a '+age(b.buyback.observedAt);h+='<p class="small lline ok">'+logo(b.buyback.platform,null,18)+(bu?'<a href="'+esc(bu)+'" target="_blank" rel="noopener">'+btxt+'</a>':btxt)+'</p>';}
     h+='<p class="small">'+(m.ratio!=null?'Ratio : '+m.ratio+' &nbsp; ':'')+(bk&&bk.listPriceCents?'Prix éditeur : '+eur(bk.listPriceCents):'')+'</p>';
   }
   if(bk&&(bk.isbn13||bk.isbn10))h+='<p class="small">▮▯▮ '+esc(bk.isbn13||"")+(bk.isbn10?" / "+esc(bk.isbn10):"")+'</p>';
   h+='<p class="small">Lu sur la tranche : « '+esc(b.rawTitle)+' » · confiance '+({high:"élevée",medium:"moyenne",low:"faible"}[b.confidence]||b.confidence)+'</p>';
-  h+='</div></div><div class="right">';
+  h+='</div></div><div class="rightwrap"><div class="right">';
   if(b.spine)h+='<canvas width="'+b.spine.w+'" height="'+b.spine.h+'" data-i="'+b.i+'" title="Tranche sur ta photo : clique pour la voir sur la photo"></canvas>';
   if(m&&m.lastSales.length){h+='<table><tr><th>Vendu il y a</th>'+m.lastSales.map(function(x){return '<td>'+age(x.soldAt)+'</td>';}).join("")+'</tr><tr><th>Au prix de</th>'+m.lastSales.map(function(x){return '<td><b>'+eur(x.priceCents)+'</b></td>';}).join("")+'</tr></table>';}
   else if(m)h+='<p class="small">Aucune vente connue</p>';
-  return h+'</div></article>';
+  h+='</div><div class="icons">';
+  if(b.polygon)h+='<button class="ib" data-act="loc" data-i="'+b.i+'" title="Emplacement sur la photo" aria-label="Emplacement sur la photo">'+IC.loc+'</button>';
+  if(m)h+='<button class="ib" data-act="hist" data-i="'+b.i+'" title="Historique des ventes" aria-label="Historique des ventes">'+IC.hist+'</button>';
+  if(bk||m)h+='<button class="ib" data-act="more" data-i="'+b.i+'" title="Sites de vente et actions" aria-label="Sites de vente et actions">'+IC.more+'</button>';
+  return h+'</div></div></article>';
 }
 function render(){
   sortsEl.querySelectorAll("button").forEach(function(bt){bt.classList.toggle("on",bt.dataset.k===sort);});
@@ -181,7 +240,53 @@ function render(){
   document.getElementById("count").textContent=shown.length+" livre(s)";
   var list=document.getElementById("list");list.innerHTML=shown.map(card).join("");
   list.querySelectorAll("canvas").forEach(function(c){var b=books[+c.dataset.i];var ctx=c.getContext("2d");var go=function(){ctx.setTransform.apply(ctx,b.spine.t);ctx.drawImage(img,0,0,D.photo.width,D.photo.height);};img.complete?go():img.addEventListener("load",go);c.addEventListener("click",function(){select(b.i,false);});});
+  list.querySelectorAll(".ib").forEach(function(bt){bt.addEventListener("click",function(){open(bt.dataset.act,books[+bt.dataset.i]);});});
   paint();
+}
+var dlg=document.getElementById("dlg"),dbody=document.getElementById("dlgbody");
+document.getElementById("dlgclose").addEventListener("click",function(){dlg.close();});
+dlg.addEventListener("click",function(e){if(!document.getElementById("sheet").contains(e.target))dlg.close();});
+function drawSpine(c,b){var ctx=c.getContext("2d");var go=function(){ctx.setTransform.apply(ctx,b.spine.t);ctx.drawImage(img,0,0,D.photo.width,D.photo.height);};img.complete?go():img.addEventListener("load",go);}
+function open(act,b){
+  var bk=b.book,m=b.metrics,h="",title=bk?bk.title:b.rawTitle;
+  if(act==="loc"){
+    title="Emplacement sur la photo";
+    var cx=0,cy=0;b.polygon.forEach(function(p){cx+=p.x/b.polygon.length;cy+=p.y/b.polygon.length;});
+    h+='<div class="locphoto"><img src="'+D.photo.dataUrl+'" alt=""><svg viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true"><polygon points="'+b.polygon.map(function(p){return p.x+","+p.y;}).join(" ")+'" fill="rgba(217,70,239,.55)" stroke="#c026d3" stroke-width="3" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg>';
+    h+='<span class="ring ping" style="left:'+cx*100+'%;top:'+cy*100+'%"></span><span class="ring" style="left:'+cx*100+'%;top:'+cy*100+'%"></span><span class="pager">1 / 1</span></div>';
+    h+='<div class="locmeta"><span>1 / 1</span><label><input type="checkbox" disabled> Charger toutes les images</label></div>';
+    if(b.spine)h+='<canvas class="bigspine" width="'+b.spine.w+'" height="'+b.spine.h+'"></canvas>';
+    if(bk&&(bk.isbn13||bk.isbn10))h+='<p class="isbns">'+[bk.isbn13,bk.isbn10].filter(Boolean).map(esc).join(" | ")+'</p>';
+  }else if(act==="hist"){
+    title="Historique des ventes";
+    var sales=m.sales||[];
+    h+='<p><b>'+(m.sales12m==null?'Ventes inconnues':m.sales12m+' vente(s) sur 12 mois')+'</b>'+(m.sales30d!=null?' · '+m.sales30d+' vente(s) sur 30 jours':'')+'</p>';
+    if(b.demo)h+='<p><span class="demo">VENTES DE DÉMO (FAUSSES)</span></p>';
+    if(sales.length){
+      var now=new Date(),months=[];for(var k=0;k<12;k++){var d=new Date(now.getFullYear(),now.getMonth()-11+k,1);months.push({l:d.toLocaleDateString("fr-FR",{month:"short"}),n:sales.filter(function(s){var x=new Date(s.soldAt);return x.getFullYear()===d.getFullYear()&&x.getMonth()===d.getMonth();}).length});}
+      var mx=Math.max.apply(null,[1].concat(months.map(function(x){return x.n;}))),H=90;
+      h+='<p class="small">Ventes par mois (12 derniers mois)</p><svg class="chart" viewBox="0 0 360 108" role="img" aria-label="Ventes par mois"><line x1="0" x2="360" y1="'+H+'" y2="'+H+'" stroke="var(--line)"/>';
+      months.forEach(function(x,i){var hh=x.n/mx*(H-14);h+='<g><rect x="'+(i*30+6)+'" y="0" width="18" height="'+H+'" fill="transparent"><title>'+esc(x.l)+' : '+x.n+'</title></rect>';if(x.n)h+='<path pointer-events="none" fill="var(--brand)" d="M'+(i*30+6)+','+H+' v'+(-(hh-4))+' q0,-4 4,-4 h10 q4,0 4,4 v'+(hh-4)+' z"/><text x="'+(i*30+15)+'" y="'+(H-hh-3)+'" text-anchor="middle" font-size="10" fill="var(--ink)">'+x.n+'</text>';h+='<text x="'+(i*30+15)+'" y="'+(H+13)+'" text-anchor="middle" font-size="9" fill="var(--muted)">'+esc(x.l)+'</text></g>';});
+      h+='</svg><table class="hist"><tr><th>Date</th><th>Plateforme</th><th style="text-align:right">Prix</th></tr>'+sales.map(function(s){return '<tr><td>'+new Date(s.soldAt).toLocaleDateString("fr-FR")+'</td><td>'+esc(s.platform?D.names[s.platform]||s.platform:"—")+'</td><td>'+eur(s.priceCents)+'</td></tr>';}).join("")+'</table>';
+    }else h+='<p class="small">Aucune vente connue</p>';
+  }else{
+    h+='<div class="sites">';
+    (b.sites||[]).forEach(function(s){h+='<a class="site" href="'+esc(s.url)+'" target="_blank" rel="noopener" title="'+esc(s.name)+' : voir les annonces de ce livre">'+logo(s.id,s.color,40)+'<span>'+esc(s.name)+'</span><b'+(s.priceKind==="buyback"?' class="ok"':'')+'>'+(s.priceCents==null?'—':(s.priceKind==="buyback"?'↩ ':'')+eur(s.priceCents))+'</b></a>';});
+    if(bk&&bk.isbn13)h+='<a class="site" href="https://books.google.com/books?vid=ISBN'+esc(bk.isbn13)+'" target="_blank" rel="noopener"><span class="act">ℹ️</span><span>Info</span></a>';
+    if(m)h+='<button class="site" data-go="hist"><span class="act">📈</span><span>Graphique</span></button>';
+    h+='<button class="site" data-go="share"><span class="act">📤</span><span>Partager</span></button></div>';
+    if(!bk||!bk.isbn13)h+='<p class="small">Pas d\\'ISBN : les liens cherchent par titre et auteur.</p>';
+    h+='<section class="buybox"><h3>'+logo("amazon",null,24)+'Meilleure offre Amazon</h3>';
+    var a=b.amazonBest;
+    if(a){h+='<p class="small">Relevé le '+new Date(a.observedAt).toLocaleString("fr-FR",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})+'</p><p class="small"><b>'+(a.offerType==="NEW"?"NEUF":"OCCASION")+'</b></p><p class="big">'+eur(a.priceCents)+'</p><p><span class="tag">'+(b.demo?'Démo (faux)':'API')+'</span>'+(a.url?'<a class="tag" href="'+esc(a.url)+'" target="_blank" rel="noopener">Voir l\\'offre</a>':'')+'</p><p class="small">Vendeur, frais de port et part de la Buy Box ne sont pas fournis par nos sources de prix pour l\\'instant.</p>';}
+    else h+='<p class="small">Aucune offre Amazon relevée pour l\\'instant (il faut une clé Keepa, ou un prix saisi à la main).</p>';
+    h+='<p class="small">Pour actualiser les prix de cette page, relance <code>npm run scan:report</code> (dans l\\'appli, un bouton « Actualiser les prix » est ici).</p></section>';
+  }
+  document.getElementById("dlgtitle").textContent=title;
+  dbody.innerHTML=h;
+  var c=dbody.querySelector(".bigspine");if(c)drawSpine(c,b);
+  dbody.querySelectorAll("[data-go]").forEach(function(x){x.addEventListener("click",function(){if(x.dataset.go==="hist")open("hist",b);else{var t=(bk?bk.title:b.rawTitle)+(bk&&bk.isbn13?" — ISBN "+bk.isbn13:"");if(navigator.share)navigator.share({title:t,text:t}).catch(function(){});else if(navigator.clipboard)navigator.clipboard.writeText(t);}});});
+  if(!dlg.open)dlg.showModal();
 }
 document.getElementById("q").addEventListener("input",function(e){q=e.target.value;render();});
 document.getElementById("export").addEventListener("click",function(){

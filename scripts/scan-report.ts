@@ -14,6 +14,7 @@ import { normalizePhoto } from "../src/lib/image";
 import { cleanDetections, detectBooks, DetectionResultSchema, type CleanDetection } from "../src/lib/vision";
 import { lookupByIsbn, lookupByTitle, type BookInfo } from "../src/lib/books";
 import { enabledProviders, resaleSettings } from "../src/lib/prices";
+import { bestAmazonOffer, siteLinks } from "../src/lib/prices/platforms";
 import { demoPrices } from "../src/lib/prices/providers/demo";
 import { computeStats } from "../src/lib/prices/stats";
 import { computeMetrics } from "../src/lib/prices/metrics";
@@ -99,6 +100,7 @@ async function main() {
       : null;
     const buyback = points.filter((p) => p.offerType === "BUYBACK").sort((a, b) => b.priceCents - a.priceCents)[0];
     const amazon = points.filter((p) => p.platform === "amazon" && (p.offerType === "NEW" || p.offerType === "USED"));
+    const best = bestAmazonOffer(points);
     return {
       rawTitle: d.title,
       rawAuthor: d.author,
@@ -120,6 +122,8 @@ async function main() {
       amazon: amazon.length
         ? { priceCents: Math.min(...amazon.map((a) => a.priceCents)), count: amazon.length, url: amazon[0].url ?? null }
         : null,
+      amazonBest: best ? { offerType: best.offerType, priceCents: best.priceCents, observedAt: best.observedAt.toISOString(), url: best.url ?? null } : null,
+      sites: siteLinks({ isbn13: info?.isbn13 ?? null, title: info?.title ?? d.title, author: info?.authors[0] ?? d.author }, points),
       demo,
     };
   });
