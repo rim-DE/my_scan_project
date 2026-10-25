@@ -122,8 +122,8 @@ Toutes sont décrites dans [`.env.example`](.env.example).
 | `GOOGLE_BOOKS_API_KEY` | conseillé | Évite le quota partagé de Google Books |
 | `ALLOW_REGISTRATION` | non | Autoriser d'autres inscriptions après le premier compte |
 | `INITIAL_CREDITS`, `CREDITS_PER_PHOTO` | non | Crédits offerts et coût d'une photo |
-| `STORAGE_DRIVER` | non | `local`, `blob` ou `s3` (par défaut : `blob` si `BLOB_READ_WRITE_TOKEN` existe, sinon `local`) |
-| `BLOB_READ_WRITE_TOKEN` | si `blob` | Ajouté automatiquement par Vercel quand un magasin Blob est relié au projet |
+| `STORAGE_DRIVER` | non | `local`, `blob` ou `s3` (par défaut : `blob` si `BLOB_STORE_ID` ou `BLOB_READ_WRITE_TOKEN` existe, sinon `local`) |
+| `BLOB_STORE_ID` ou `BLOB_READ_WRITE_TOKEN` | si `blob` | Ajouté automatiquement par Vercel quand un magasin Blob est relié au projet |
 | `LOCAL_UPLOAD_DIR` | non | Dossier des photos en mode local |
 | `S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | si `s3` | Stockage S3 ou compatible |
 | `PRICE_CACHE_TTL_HOURS` | non | Durée du cache des prix |
@@ -139,7 +139,7 @@ Toutes sont décrites dans [`.env.example`](.env.example).
 
 1. **Neon** : crée un projet (région Europe). Dans « Connect », désactive *Connection pooling* puis copie l'adresse dans `DATABASE_URL` (les migrations Prisma ont besoin d'une connexion directe).
 2. **Vercel** : importe le dépôt GitHub, ajoute les variables d'environnement (`DATABASE_URL`, `AUTH_SECRET`, `ANTHROPIC_API_KEY`, `CRON_SECRET`, et si tu les as `GOOGLE_BOOKS_API_KEY`, `EBAY_*`, `KEEPA_API_KEY`), puis déploie. Pour `AUTH_SECRET` et `CRON_SECRET` : `openssl rand -base64 32`.
-3. **Photos** : dans le projet Vercel, onglet *Storage* → *Create* → *Blob*, accès **Private**, relié au projet. Vercel ajoute tout seul `BLOB_READ_WRITE_TOKEN`, et l'appli l'utilise dès qu'il est présent. Redéploie ensuite (*Deployments* → *Redeploy*). Sur Vercel le disque n'est pas permanent : le stockage local ne marche pas.
+3. **Photos** : dans le projet Vercel, onglet *Storage* → *Create* → *Blob*, accès **Private**, relié au projet. Vercel ajoute tout seul `BLOB_STORE_ID` (connexion OIDC) ou `BLOB_READ_WRITE_TOKEN`, et l'appli utilise Blob dès que l'un des deux est présent. Redéploie ensuite (*Deployments* → *Redeploy*). Sur Vercel le disque n'est pas permanent : le stockage local ne marche pas.
 4. Ouvre l'adresse donnée par Vercel et crée ton compte (le premier compte peut toujours s'inscrire).
 
 Plutôt un stockage S3 (Cloudflare R2, Scaleway…) ? Crée un bucket et une clé « lecture/écriture », puis renseigne `STORAGE_DRIVER=s3` et les variables `S3_*` (pour R2 : `S3_REGION=auto`, `S3_ENDPOINT=https://<id-de-compte>.r2.cloudflarestorage.com`).

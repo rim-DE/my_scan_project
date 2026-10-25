@@ -30,11 +30,14 @@ export const env = {
 
   googleBooksApiKey: () => process.env.GOOGLE_BOOKS_API_KEY,
 
-  /** STORAGE_DRIVER l'emporte ; sinon Vercel Blob dès que Vercel fournit BLOB_READ_WRITE_TOKEN, sinon disque local. */
+  /**
+   * STORAGE_DRIVER l'emporte ; sinon Vercel Blob dès qu'un magasin est relié au projet, sinon disque local.
+   * Vercel fournit soit BLOB_READ_WRITE_TOKEN (jeton), soit BLOB_STORE_ID (connexion OIDC, le SDK obtient le jeton tout seul).
+   */
   storageDriver: (): "local" | "s3" | "blob" => {
     const d = process.env.STORAGE_DRIVER;
     if (d === "s3" || d === "blob" || d === "local") return d;
-    return process.env.BLOB_READ_WRITE_TOKEN ? "blob" : "local";
+    return process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_STORE_ID ? "blob" : "local";
   },
   localUploadDir: () => process.env.LOCAL_UPLOAD_DIR || "./uploads",
   s3: () => ({
