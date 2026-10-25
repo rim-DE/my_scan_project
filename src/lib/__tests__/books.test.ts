@@ -20,6 +20,20 @@ describe("identification des livres", () => {
     expect(scoreCandidate({ title: "Pirates corsaires et flibustiers", author: null }, c)).toBeLessThan(MIN_MATCH_SCORE);
   });
 
+  it("préfère l'édition dans la langue du scan", () => {
+    const base = { isbn10: null, authors: ["Nicolas Vanier"], publisher: null, publishedDate: null, pageCount: null, coverUrl: null, listPriceCents: null, source: "google" as const };
+    const polish = { ...base, isbn13: "9788381880466", title: "Bella i Sebastian - Nicolas Vanier [KSIĄŻKA]", language: "pl" };
+    // Seul le nom de l'auteur était lisible sur la tranche : il ne suffit plus à valider une édition étrangère.
+    expect(scoreCandidate({ title: "Nicolas Vanier", language: "fr" }, polish)).toBeLessThan(MIN_MATCH_SCORE);
+    const french = { ...base, isbn13: "9782081297159", title: "Belle et Sébastien", language: "fr" };
+    const englishTitle = { ...french, language: "en" };
+    expect(scoreCandidate({ title: "Belle et Sébastien", author: "Nicolas Vanier", language: "fr" }, french)).toBeGreaterThan(
+      scoreCandidate({ title: "Belle et Sébastien", author: "Nicolas Vanier", language: "fr" }, englishTitle),
+    );
+    // Un livre en anglais sur une étagère française reste identifiable si le titre correspond bien.
+    expect(scoreCandidate({ title: "Belle et Sébastien", author: "Nicolas Vanier", language: "fr" }, englishTitle)).toBeGreaterThan(MIN_MATCH_SCORE);
+  });
+
   it("lit une réponse Google Books", () => {
     const b = parseGoogleVolume({
       volumeInfo: {
@@ -45,8 +59,8 @@ describe("identification des livres", () => {
   });
 
   it("lit une réponse Open Library", () => {
-    const b = parseOpenLibraryDoc({ title: "Rester en vie", author_name: ["Matt Haig"], isbn: ["notanisbn", "9782070368228"], cover_i: 42 });
-    expect(b).toMatchObject({ isbn13: "9782070368228", coverUrl: "https://covers.openlibrary.org/b/id/42-M.jpg" });
+    const b = parseOpenLibraryDoc({ title: "Rester en vie", author_name: ["Matt Haig"], isbn: ["notanisbn", "9782070368228"], cover_i: 42, language: ["fre"] });
+    expect(b).toMatchObject({ isbn13: "9782070368228", coverUrl: "https://covers.openlibrary.org/b/id/42-M.jpg", language: "fr" });
   });
 
   it("clé de cache stable", () => {
