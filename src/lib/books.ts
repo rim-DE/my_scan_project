@@ -48,8 +48,16 @@ export function similarity(a: string, b: string): number {
 /** Pénalité quand l'édition trouvée n'est pas dans la langue des livres scannés (ex. édition polonaise d'un livre français). */
 export const OTHER_LANGUAGE_PENALTY = 0.15;
 
+/** Similarité des titres sans les mots du nom de l'auteur : un titre lu qui n'est que le nom de l'auteur ne prouve rien. */
+export function titleSimilarity(queryTitle: string, candidateTitle: string, authorNames: string[]): number {
+  const names = new Set(authorNames.flatMap((n) => [...tokens(n)]));
+  const strip = (t: string) => [...tokens(t)].filter((w) => !names.has(w)).join(" ");
+  return similarity(strip(queryTitle), strip(candidateTitle));
+}
+
 export function scoreCandidate(query: { title: string; author?: string | null; language?: string | null }, c: BookInfo): number {
-  let score = similarity(query.title, c.title);
+  const authorNames = query.author ? [query.author, ...c.authors] : c.authors;
+  let score = titleSimilarity(query.title, c.title, authorNames);
   if (query.author && c.authors.length > 0) {
     const a = Math.max(...c.authors.map((x) => similarity(query.author!, x)));
     score = score * 0.75 + a * 0.25;
@@ -230,6 +238,6 @@ export async function lookupByTitle(query: { title: string; author?: string | nu
 }
 
 export function lookupCacheKey(title: string, author: string | null | undefined, language: string): string {
-  // "v2" : les recherches faites avant la pénalité de langue ne sont pas réutilisées.
-  return `v2|${language}|${normalizeText(title)}|${normalizeText(author ?? "")}`;
+  // "v3" : les recherches faites avant les dernières règles de score ne sont pas réutilisées.
+  return `v3|${language}|${normalizeText(title)}|${normalizeText(author ?? "")}`;
 }
