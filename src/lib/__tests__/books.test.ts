@@ -23,8 +23,11 @@ describe("identification des livres", () => {
   it("préfère l'édition dans la langue du scan", () => {
     const base = { isbn10: null, authors: ["Nicolas Vanier"], publisher: null, publishedDate: null, pageCount: null, coverUrl: null, listPriceCents: null, source: "google" as const };
     const polish = { ...base, isbn13: "9788381880466", title: "Bella i Sebastian - Nicolas Vanier [KSIĄŻKA]", language: "pl" };
-    // Seul le nom de l'auteur était lisible sur la tranche : il ne suffit plus à valider une édition étrangère.
+    // Seul le nom de l'auteur était lisible sur la tranche : il ne suffit pas à valider une édition dont le titre le contient.
     expect(scoreCandidate({ title: "Nicolas Vanier", language: "fr" }, polish)).toBeLessThan(MIN_MATCH_SCORE);
+    expect(scoreCandidate({ title: "Nicolas Vanier", author: "Nicolas Vanier", language: "fr" }, polish)).toBeLessThan(MIN_MATCH_SCORE);
+    // ... même quand le catalogue ne donne pas (ou mal) la langue de l'édition.
+    expect(scoreCandidate({ title: "Nicolas Vanier", author: "Nicolas Vanier", language: "fr" }, { ...polish, language: null })).toBeLessThan(MIN_MATCH_SCORE);
     const french = { ...base, isbn13: "9782081297159", title: "Belle et Sébastien", language: "fr" };
     const englishTitle = { ...french, language: "en" };
     expect(scoreCandidate({ title: "Belle et Sébastien", author: "Nicolas Vanier", language: "fr" }, french)).toBeGreaterThan(
