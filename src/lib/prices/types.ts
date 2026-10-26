@@ -19,9 +19,22 @@ export interface SalesEstimate {
   sales12m: number | null;
 }
 
+/** Infos de la fiche produit (Keepa / Amazon). null = inconnu. */
+export interface BookInfo {
+  /** Nombre d'offres en ce moment (neuf + occasion). */
+  offerCount: number | null;
+  /** Classement des ventes Amazon (1 = le plus vendu). */
+  salesRank: number | null;
+  /** Note moyenne sur 5. */
+  rating: number | null;
+  reviewCount: number | null;
+  listPriceCents: number | null;
+}
+
 export interface ProviderResult {
   observations: PriceObservation[];
   sales?: SalesEstimate;
+  info?: BookInfo;
 }
 
 export interface BookRef {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseEbayItems, mapEbayCondition } from "../prices/providers/ebay";
-import { parseKeepaProduct, parseKeepaSales } from "../prices/providers/keepa";
+import { keepaTimeToDate, parseKeepaInfo, parseKeepaProduct, parseKeepaSaleHistory, parseKeepaSales } from "../prices/providers/keepa";
 import { demoPrices } from "../prices/providers/demo";
 import { bestAmazonOffer, PLATFORMS, siteLinks } from "../prices/platforms";
 
@@ -34,6 +34,43 @@ describe("sources de prix", () => {
   it("lit le nombre de ventes estimé par Keepa", () => {
     expect(parseKeepaSales({ stats: { salesRankDrops30: 2, salesRankDrops365: 24 } })).toEqual({ sales30d: 2, sales12m: 24 });
     expect(parseKeepaSales({ stats: { salesRankDrops30: -1 } })).toEqual({ sales30d: null, sales12m: null });
+  });
+
+  it("lit la fiche Amazon de Keepa : offres, rang, note, prix éditeur", () => {
+    const current = Array(18).fill(-1);
+    Object.assign(current, { 3: 636, 4: 2800, 11: 4, 12: 10, 16: 46, 17: 3605 });
+    expect(parseKeepaInfo({ stats: { current } })).toEqual({
+      offerCount: 14,
+      salesRank: 636,
+      rating: 4.6,
+      reviewCount: 3605,
+      listPriceCents: 2800,
+    });
+    expect(parseKeepaInfo({})).toEqual({ offerCount: null, salesRank: null, rating: null, reviewCount: null, listPriceCents: null });
+  });
+
+  it("déduit les ventes Amazon datées de l'historique du classement Keepa", () => {
+    const now = new Date("2026-10-26T12:00:00Z");
+    // Temps Keepa (minutes depuis 2011) pour "il y a n jours".
+    const k = (days: number) => Math.round((now.getTime() - days * 86400000) / 60000) - 21564000;
+    const product = {
+      asin: "2848992549",
+      csv: [
+        null,
+        [k(400), 3000, k(6), 2600],
+        [k(400), 2000, k(8), 2300, k(4), 2500],
+        // Classement : améliorations à 500 j (trop ancien), 7 j et 3 j ; dégradation à 5 j.
+        [k(600), 9000, k(500), 5000, k(10), 8000, k(7), 1200, k(5), 4000, k(3), 636],
+      ],
+    };
+    const sales = parseKeepaSaleHistory(product, "FR", now);
+    expect(sales.map((s) => [Math.round((now.getTime() - s.observedAt!.getTime()) / 86400000), s.priceCents])).toEqual([
+      [7, 2300],
+      [3, 2500],
+    ]);
+    expect(sales[0]).toMatchObject({ platform: "amazon", offerType: "SOLD", url: "https://www.amazon.fr/dp/2848992549" });
+    expect(keepaTimeToDate(0).toISOString()).toBe("2011-01-01T00:00:00.000Z");
+    expect(parseKeepaSaleHistory({}, "FR", now)).toEqual([]);
   });
 
   it("le mode démo est déterministe et invente aussi des ventes passées datées", () => {

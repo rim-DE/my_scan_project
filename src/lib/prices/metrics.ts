@@ -37,7 +37,7 @@ const DAY = 24 * 3600 * 1000;
 export function computeMetrics(
   points: SalePoint[],
   stats: PriceStats,
-  book: { listPriceCents: number | null; sales12m: number | null; sales30d: number | null },
+  book: { listPriceCents: number | null; sales12m: number | null; sales30d: number | null; offerCount?: number | null },
   now = new Date(),
 ): BookMetrics {
   const sold = points
@@ -69,7 +69,8 @@ export function computeMetrics(
     weightedProfit30dCents,
     ratio,
     currentPriceCents: offers.length ? Math.min(...offers.map((p) => p.priceCents)) : null,
-    currentOfferCount: offers.length,
+    // Le nombre réel d'offres (Keepa) quand on le connaît, sinon les offres relevées.
+    currentOfferCount: book.offerCount ?? offers.length,
   };
 }
 

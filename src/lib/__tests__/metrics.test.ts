@@ -16,17 +16,17 @@ describe("indicateurs façon BiblioScan", () => {
       { platform: "ebay", offerType: "USED", priceCents: 2600, observedAt: daysAgo(1) },
       { platform: "ebay", offerType: "NEW", priceCents: 3000, observedAt: daysAgo(1) },
     ];
-    const stats = computeStats(points, SETTINGS);
+    const stats = computeStats(points, SETTINGS, NOW);
     const m = computeMetrics(points, stats, { listPriceCents: 3000, sales12m: null, sales30d: null }, NOW);
     expect(m.sales12m).toBe(3);
     expect(m.sales30d).toBe(1);
     expect(m.lastSales.map((s) => s.priceCents)).toEqual([2500, 2300, 2400]);
     expect(m.sales).toHaveLength(3);
     expect(m.sales[0].platform).toBe("ebay");
-    // Médiane 2500, 3 ventes par an = 0,25 vente par mois.
-    expect(stats.medianCents).toBe(2500);
-    expect(m.weightedProfit30dCents).toBe(625);
-    expect(m.ratio).toBe(0.83);
+    // Médiane des ventes de l'année 2400 (les offres en cours ne comptent pas), 3 ventes par an = 0,25 vente par mois.
+    expect(stats.medianCents).toBe(2400);
+    expect(m.weightedProfit30dCents).toBe(600);
+    expect(m.ratio).toBe(0.8);
     expect(m.currentPriceCents).toBe(2600);
     expect(m.currentOfferCount).toBe(2);
   });
@@ -52,5 +52,15 @@ describe("indicateurs façon BiblioScan", () => {
     expect(shortAge(daysAgo(65), NOW)).toBe("2m");
     expect(shortAge(daysAgo(400), NOW)).toBe("1a 1m");
     expect(shortAge(daysAgo(65), NOW, "en")).toBe("2mo");
+  });
+});
+
+describe("nombre d'offres", () => {
+  it("préfère le nombre réel d'offres de la fiche Amazon (Keepa)", () => {
+    const points: (SalePoint & { platform: string })[] = [{ platform: "amazon", offerType: "USED", priceCents: 2500, observedAt: NOW }];
+    const stats = computeStats(points, SETTINGS, NOW);
+    const m = computeMetrics(points, stats, { listPriceCents: 2800, sales12m: 126, sales30d: 10, offerCount: 14 }, NOW);
+    expect(m.currentOfferCount).toBe(14);
+    expect(m.currentPriceCents).toBe(2500);
   });
 });

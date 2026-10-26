@@ -114,6 +114,8 @@ export const en: Dict = {
     refreshPrices: "Refresh prices",
     demoWarning: "Demo data (fake) — PRICE_DEMO_MODE is on.",
     publisherPrice: "List price",
+    salesRank: "Rank",
+    salesRankHelp: "Amazon sales rank: the smaller the number, the better the book sells.",
     offerTypes: { NEW: "New", USED: "Used", BUYBACK: "Buyback", SOLD: "Sold" },
     sources: { api: "API", manual: "Manual", demo: "Demo" },
     weightedProfit: "30-day weighted profit",

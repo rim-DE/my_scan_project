@@ -139,7 +139,7 @@ export function BookCard({ detection, photo, photos = [], t, country, lists, pat
               <SiteLogo id="amazon" color="#ff9900" size={18} />
               <a href={amazonMin?.url ?? amazonSearchUrl} target="_blank" rel="noopener noreferrer" className="underline">
                 {amazonMin
-                  ? fmt(t.book.currentlySold, { price: fp(amazonMin.priceCents, amazonMin.currency), n: amazon.length })
+                  ? fmt(t.book.currentlySold, { price: fp(amazonMin.priceCents, amazonMin.currency), n: m.currentOfferCount || amazon.length })
                   : m.currentPriceCents !== null
                     ? fmt(t.book.currentlySold, { price: fp(m.currentPriceCents), n: m.currentOfferCount })
                     : t.book.seeOnAmazon}
@@ -171,6 +171,17 @@ export function BookCard({ detection, photo, photos = [], t, country, lists, pat
               {b.listPriceCents && (
                 <span>
                   {t.book.publisherPrice} : {fp(b.listPriceCents)}
+                </span>
+              )}
+              {b.rating !== null && (
+                <span>
+                  ★ {b.rating.toLocaleString(loc)}
+                  {b.reviewCount !== null && ` (${b.reviewCount.toLocaleString(loc)})`}
+                </span>
+              )}
+              {b.salesRank !== null && (
+                <span title={t.book.salesRankHelp}>
+                  {t.book.salesRank} #{b.salesRank.toLocaleString(loc)}
                 </span>
               )}
             </p>

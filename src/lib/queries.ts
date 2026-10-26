@@ -29,6 +29,9 @@ export interface BookView {
   publishedDate: string | null;
   coverUrl: string | null;
   listPriceCents: number | null;
+  salesRank: number | null;
+  rating: number | null;
+  reviewCount: number | null;
   stats: PriceStats;
   metrics: BookMetrics;
   prices: PriceRow[];
@@ -62,6 +65,9 @@ export function toBookView(book: BookWithPrices, country: string): BookView {
     publishedDate: book.publishedDate,
     coverUrl: book.coverUrl,
     listPriceCents: book.listPriceCents,
+    salesRank: book.salesRank,
+    rating: book.rating,
+    reviewCount: book.reviewCount,
     stats,
     metrics: computeMetrics(snaps, stats, book),
     prices: bestByPlatform(rows),
