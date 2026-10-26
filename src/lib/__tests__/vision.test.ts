@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanDetections, DetectionResultSchema, type DetectedBook } from "../vision";
+import { cleanDetections, DetectionResultSchema, mergeTiles, readingOrder, tileLayout, type DetectedBook } from "../vision";
 
 const SIZE = { width: 1000, height: 2000 };
 
@@ -15,7 +15,6 @@ const book = (over: Partial<DetectedBook>): DetectedBook => ({
   author: null,
   publisher: null,
   isbn: null,
-  spine_text: "Festival Fairy Tales",
   corners: quad(700, 1600, 740, 1980),
   text_direction: "bottom_to_top",
   confidence: "high",
@@ -61,5 +60,45 @@ describe("détection", () => {
   it("le schéma accepte une réponse type du modèle", () => {
     const parsed = DetectionResultSchema.parse({ books: [book({ author: "Kate Forrester" })] });
     expect(parsed.books[0].author).toBe("Kate Forrester");
+  });
+});
+
+describe("découpage en bandes", () => {
+  it("coupe les grandes photos en 2 ou 3 bandes qui se recouvrent et couvrent toute la largeur", () => {
+    expect(tileLayout(800, 1000)).toEqual([{ left: 0, width: 800 }]);
+    for (const [w, h, n] of [
+      [1456, 2576, 2],
+      [2576, 1456, 3],
+      [2000, 1500, 2],
+    ]) {
+      const tiles = tileLayout(w, h);
+      expect(tiles).toHaveLength(n);
+      expect(tiles[0].left).toBe(0);
+      expect(tiles.at(-1)!.left + tiles.at(-1)!.width).toBe(w);
+      for (let i = 1; i < tiles.length; i++) {
+        // Recouvrement d'au moins 15 % de la largeur entre deux bandes voisines.
+        expect(tiles[i - 1].left + tiles[i - 1].width - tiles[i].left).toBeGreaterThanOrEqual(Math.round(w * 0.15));
+      }
+    }
+  });
+
+  it("garde une seule fois un livre vu dans deux bandes, et deux livres voisins distincts", () => {
+    const full = cleanDetections([book({ title: "Les Misérables", corners: quad(480, 100, 520, 900) })], SIZE);
+    const cut = cleanDetections([book({ title: "Les Misér", corners: quad(480, 100, 500, 900) })], SIZE);
+    const other = cleanDetections([book({ title: "Notre-Dame de Paris", corners: quad(520, 100, 560, 900) })], SIZE);
+    const out = mergeTiles([[...full], [...cut, ...other]]);
+    expect(out.map((b) => b.title)).toEqual(["Les Misérables", "Notre-Dame de Paris"]);
+  });
+
+  it("ne fusionne pas un livre penché avec son voisin d'une autre bande sans mot en commun", () => {
+    const tilted = cleanDetections([book({ title: "Germinal", corners: [{ x: 400, y: 100 }, { x: 440, y: 100 }, { x: 560, y: 900 }, { x: 520, y: 900 }] })], SIZE);
+    const thin = cleanDetections([book({ title: "Nana", corners: quad(470, 300, 490, 700) })], SIZE);
+    expect(mergeTiles([tilted, thin])).toHaveLength(2);
+  });
+
+  it("remet les livres dans l'ordre : étagère par étagère, de gauche à droite", () => {
+    const b = (title: string, x: number, y: number) => cleanDetections([book({ title, corners: quad(x, y, x + 30, y + 400) })], SIZE)[0];
+    const out = readingOrder([b("DD", 100, 1200), b("BB", 300, 100), b("CC", 50, 1180), b("AA", 100, 120)]);
+    expect(out.map((x) => x.title)).toEqual(["AA", "BB", "CC", "DD"]);
   });
 });

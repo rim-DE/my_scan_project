@@ -70,6 +70,14 @@ export function boxToQuad(b: NormalizedBox): Point[] {
   ];
 }
 
+/** Part du plus petit rectangle couverte par l'autre (1 = entièrement dedans). Repère un livre coupé vu deux fois. */
+export function overlapOfSmaller(a: NormalizedBox, b: NormalizedBox): number {
+  const ix = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
+  const iy = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+  const smaller = Math.min(a.w * a.h, b.w * b.h);
+  return smaller > 0 ? (ix * iy) / smaller : 0;
+}
+
 /** Part de recouvrement entre deux rectangles (intersection / union), entre 0 et 1. */
 export function iou(a: NormalizedBox, b: NormalizedBox): number {
   const ix = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));

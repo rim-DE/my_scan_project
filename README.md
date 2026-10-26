@@ -119,6 +119,7 @@ Toutes sont décrites dans [`.env.example`](.env.example).
 | `AUTH_SECRET` | oui | Signature des sessions (32 caractères min.) |
 | `ANTHROPIC_API_KEY` | oui pour les photos | Détection des livres par Claude |
 | `ANTHROPIC_MODEL` | non | Modèle Claude (défaut `claude-opus-5-5`) |
+| `ANTHROPIC_EFFORT` | non | Effort de réflexion pour la détection : `high` (défaut, plus précis), `medium` ou `low` (plus rapides) |
 | `GOOGLE_BOOKS_API_KEY` | conseillé | Évite le quota partagé de Google Books |
 | `ALLOW_REGISTRATION` | non | Autoriser d'autres inscriptions après le premier compte |
 | `INITIAL_CREDITS`, `CREDITS_PER_PHOTO` | non | Crédits offerts et coût d'une photo |
