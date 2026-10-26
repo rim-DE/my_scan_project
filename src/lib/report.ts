@@ -216,10 +216,12 @@ function card(b){
     h+='<p><b>'+(m.sales12m==null?'Ventes inconnues':m.sales12m+' vente'+(m.sales12m>1?'s':'')+' sur 12 mois')+'</b></p>';
     var au=(b.amazon&&b.amazon.url)||siteUrl(b,"amazon");
     var atxt=b.amazon?'Actuellement vendu à '+eur(b.amazon.priceCents)+' · '+b.amazon.count+' offre'+(b.amazon.count>1?'s':''):m.currentPriceCents!=null?'Actuellement vendu à '+eur(m.currentPriceCents)+' · '+m.currentOfferCount+' offre(s)':null;
-    if(atxt)h+='<p class="small lline">'+logo("amazon",null,18)+(au?'<a href="'+esc(au)+'" target="_blank" rel="noopener">'+atxt+'</a>':atxt)+'</p>';
+    if(!atxt)atxt='Voir les prix sur Amazon';
+    if(au||b.amazon||m.currentPriceCents!=null)h+='<p class="small lline">'+logo("amazon",null,18)+(au?'<a href="'+esc(au)+'" target="_blank" rel="noopener">'+atxt+'</a>':atxt)+'</p>';
     if(b.buyback){var bu=siteUrl(b,b.buyback.platform);var btxt=esc(String(b.buyback.platform).toLowerCase())+' rachetait à '+eur(b.buyback.priceCents)+' il y a '+age(b.buyback.observedAt);h+='<p class="small lline ok">'+logo(b.buyback.platform,null,18)+(bu?'<a href="'+esc(bu)+'" target="_blank" rel="noopener">'+btxt+'</a>':btxt)+'</p>';}
     h+='<p class="small">'+(m.ratio!=null?'Ratio : '+m.ratio+' &nbsp; ':'')+(bk&&bk.listPriceCents?'Prix éditeur : '+eur(bk.listPriceCents):'')+'</p>';
   }
+  else{var au0=siteUrl(b,"amazon");if(au0)h+='<p class="small lline">'+logo("amazon",null,18)+'<a href="'+esc(au0)+'" target="_blank" rel="noopener">Voir les prix sur Amazon</a></p>';}
   if(bk&&(bk.isbn13||bk.isbn10))h+='<p class="small">▮▯▮ '+esc(bk.isbn13||"")+(bk.isbn10?" / "+esc(bk.isbn10):"")+'</p>';
   h+='<p class="small">Lu sur la tranche : « '+esc(b.rawTitle)+' » · confiance '+({high:"élevée",medium:"moyenne",low:"faible"}[b.confidence]||b.confidence)+'</p>';
   h+='</div></div><div class="rightwrap"><div class="right">';

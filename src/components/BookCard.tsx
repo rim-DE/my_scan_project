@@ -5,7 +5,7 @@ import type { Dict } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n";
 import type { DetectionView } from "@/lib/queries";
 import { formatPrice } from "@/lib/money";
-import { PLATFORM_BY_ID, PLATFORMS, platformName } from "@/lib/prices/platforms";
+import { PLATFORM_BY_ID, PLATFORMS, platformName, siteLinks } from "@/lib/prices/platforms";
 import { addManualPriceAction, addToListAction, addToStockAction, deletePriceAction, refreshPricesAction, saveNoteAction } from "@/app/actions";
 import { shortAge } from "@/lib/prices/metrics";
 import { SpineImage } from "./SpineImage";
@@ -97,6 +97,7 @@ export function BookCard({ detection, photo, photos = [], t, country, lists, pat
   const m = b.metrics;
   const amazon = b.prices.filter((p) => p.platform === "amazon" && p.offerType !== "SOLD" && p.offerType !== "BUYBACK");
   const amazonMin = amazon.length ? amazon.reduce((x, y) => (y.priceCents < x.priceCents ? y : x)) : null;
+  const amazonSearchUrl = siteLinks({ isbn13: b.isbn13, title: b.title, author: b.authors[0] }, []).find((l) => l.id === "amazon")!.url;
   const buyback = b.prices
     .filter((p) => p.offerType === "BUYBACK")
     .reduce<(typeof b.prices)[number] | null>((x, y) => (!x || y.priceCents > x.priceCents ? y : x), null);
@@ -133,21 +134,17 @@ export function BookCard({ detection, photo, photos = [], t, country, lists, pat
               {t.book.maxBuyLong} : <strong>{fp(s.maxBuyCents)}</strong>
             </p>
             <p className="font-semibold">{m.sales12m !== null ? fmt(t.book.salesYear, { n: m.sales12m }) : t.book.salesUnknown}</p>
-            {m.currentPriceCents !== null && (
-              <p className="flex items-center gap-1.5 text-xs">
-                <SiteLogo id="amazon" color="#ff9900" size={18} />
-                <a
-                  href={amazonMin?.url ?? PLATFORM_BY_ID.amazon.searchUrl({ isbn13: b.isbn13 ?? "", title: b.title })}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline"
-                >
-                  {amazonMin
-                    ? fmt(t.book.currentlySold, { price: fp(amazonMin.priceCents, amazonMin.currency), n: amazon.length })
-                    : fmt(t.book.currentlySold, { price: fp(m.currentPriceCents), n: m.currentOfferCount })}
-                </a>
-              </p>
-            )}
+            {/* Toujours affiché : sans prix connu, c'est un raccourci vers la recherche Amazon de ce livre (par ISBN). */}
+            <p className="flex items-center gap-1.5 text-xs">
+              <SiteLogo id="amazon" color="#ff9900" size={18} />
+              <a href={amazonMin?.url ?? amazonSearchUrl} target="_blank" rel="noopener noreferrer" className="underline">
+                {amazonMin
+                  ? fmt(t.book.currentlySold, { price: fp(amazonMin.priceCents, amazonMin.currency), n: amazon.length })
+                  : m.currentPriceCents !== null
+                    ? fmt(t.book.currentlySold, { price: fp(m.currentPriceCents), n: m.currentOfferCount })
+                    : t.book.seeOnAmazon}
+              </a>
+            </p>
             {buyback && (
               <p className="flex items-center gap-1.5 text-xs">
                 <SiteLogo id={buyback.platform} color={PLATFORM_BY_ID[buyback.platform]?.color ?? "#56b146"} size={18} />

@@ -123,6 +123,7 @@ export const fr = {
     salesYear: "{n} vente(s) sur 12 mois",
     salesUnknown: "Ventes sur 12 mois : inconnues",
     currentlySold: "Actuellement vendu à {price} · {n} offre(s)",
+    seeOnAmazon: "Voir les prix sur Amazon",
     buybackAgo: "{platform} rachetait à {price} il y a {age}",
     ratio: "Ratio",
     soldAgo: "Vendu il y a",
