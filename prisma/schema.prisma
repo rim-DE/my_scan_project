@@ -131,6 +131,11 @@ model Book {
   /// Nombre de ventes estimé (Keepa : baisses du classement des ventes Amazon), si une source le fournit.
   sales30d       Int?
   sales12m       Int?
+  /// Fiche Amazon (Keepa) : nombre d'offres, classement des ventes, note sur 5 et nombre d'avis.
+  offerCount     Int?
+  salesRank      Int?
+  rating         Float?
+  reviewCount    Int?
   source         String
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt

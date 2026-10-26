@@ -5,6 +5,8 @@ export interface PricePoint {
   platform: string;
   offerType: OfferType;
   priceCents: number;
+  /** Date de l'observation (pour une vente : date de la vente). */
+  observedAt?: Date | string;
 }
 
 export interface ResaleSettings {
@@ -49,9 +51,14 @@ export function netAfterFees(priceCents: number, s: ResaleSettings): number {
   return Math.max(0, Math.round(priceCents * (1 - s.feeRate) - s.fixedCostCents));
 }
 
-export function computeStats(points: PricePoint[], s: ResaleSettings): PriceStats {
-  // Base de revente : prix d'occasion et ventes réalisées ; à défaut, tous les prix "vente" (neuf inclus).
-  const resale = points.filter((p) => p.offerType === "USED" || p.offerType === "SOLD").map((p) => p.priceCents);
+export function computeStats(points: PricePoint[], s: ResaleSettings, now = new Date()): PriceStats {
+  // Base de revente : les ventes réalisées si on en connaît (c'est le vrai "prix médian de vente"),
+  // sinon les offres d'occasion, et à défaut tous les prix "vente" (neuf inclus).
+  const yearAgo = now.getTime() - 365 * 24 * 3600 * 1000;
+  const sold = points
+    .filter((p) => p.offerType === "SOLD" && (!p.observedAt || new Date(p.observedAt).getTime() >= yearAgo))
+    .map((p) => p.priceCents);
+  const resale = sold.length > 0 ? sold : points.filter((p) => p.offerType === "USED").map((p) => p.priceCents);
   const base = resale.length > 0 ? resale : points.filter((p) => p.offerType === "NEW").map((p) => p.priceCents);
   const sorted = [...base].sort((a, b) => a - b);
   const newPrices = points.filter((p) => p.offerType === "NEW").map((p) => p.priceCents);

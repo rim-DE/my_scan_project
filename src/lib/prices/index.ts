@@ -31,10 +31,11 @@ export async function refreshPrices(bookId: string, country: string, opts: { for
     const last = await prisma.priceFetch.findUnique({
       where: { bookId_provider_country: { bookId, provider: provider.id, country } },
     });
-    if (!opts.force && last && isFresh(last.fetchedAt, ttl)) continue;
+    // Un appel raté (quota épuisé…) est retenté à la prochaine occasion, sans attendre la fin du cache.
+    if (!opts.force && last?.ok && isFresh(last.fetchedAt, ttl)) continue;
 
     try {
-      const { observations, sales } = await provider.fetch(ref, country);
+      const { observations, sales, info } = await provider.fetch(ref, country);
       await prisma.$transaction([
         // On remplace les anciennes données de cette source (les prix saisis à la main sont conservés).
         prisma.priceSnapshot.deleteMany({ where: { bookId, country, source: provider.source, platform: { in: platformsOf(provider.id) } } }),
@@ -52,7 +53,24 @@ export async function refreshPrices(bookId: string, country: string, opts: { for
             observedAt: o.observedAt,
           })),
         }),
-        ...(sales ? [prisma.book.update({ where: { id: bookId }, data: { sales30d: sales.sales30d, sales12m: sales.sales12m } })] : []),
+        ...(sales || info
+          ? [
+              prisma.book.update({
+                where: { id: bookId },
+                data: {
+                  ...(sales && { sales30d: sales.sales30d, sales12m: sales.sales12m }),
+                  ...(info && {
+                    offerCount: info.offerCount,
+                    salesRank: info.salesRank,
+                    rating: info.rating,
+                    reviewCount: info.reviewCount,
+                    // Le prix éditeur de Google Books reste prioritaire.
+                    ...(book.listPriceCents === null && info.listPriceCents !== null && { listPriceCents: info.listPriceCents }),
+                  }),
+                },
+              }),
+            ]
+          : []),
         prisma.priceFetch.upsert({
           where: { bookId_provider_country: { bookId, provider: provider.id, country } },
           create: { bookId, provider: provider.id, country, ok: true },

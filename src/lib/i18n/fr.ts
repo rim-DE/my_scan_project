@@ -113,6 +113,8 @@ export const fr = {
     refreshPrices: "Actualiser les prix",
     demoWarning: "Données de démonstration (fausses) — PRICE_DEMO_MODE est activé.",
     publisherPrice: "Prix éditeur",
+    salesRank: "Rang",
+    salesRankHelp: "Classement des ventes Amazon : plus le nombre est petit, plus le livre se vend.",
     offerTypes: { NEW: "Neuf", USED: "Occasion", BUYBACK: "Rachat", SOLD: "Vendu" },
     sources: { api: "API", manual: "Saisi", demo: "Démo" },
     weightedProfit: "Profit pondéré sur 30j",
