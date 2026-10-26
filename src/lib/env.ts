@@ -27,6 +27,11 @@ export const env = {
 
   anthropicApiKey: () => process.env.ANTHROPIC_API_KEY,
   anthropicModel: () => process.env.ANTHROPIC_MODEL || "claude-opus-5-5",
+  /** Effort de réflexion pour la détection : "high" (précis, défaut), "medium" ou "low" (plus rapides). */
+  anthropicEffort: (): "low" | "medium" | "high" => {
+    const v = process.env.ANTHROPIC_EFFORT;
+    return v === "low" || v === "medium" ? v : "high";
+  },
 
   googleBooksApiKey: () => process.env.GOOGLE_BOOKS_API_KEY,
 

@@ -30,11 +30,12 @@ export async function processScan(scanId: string): Promise<void> {
     if (scan.kind === "PHOTO") {
       // On repart de zéro si le scan est relancé.
       await prisma.detection.deleteMany({ where: { scanId } });
-      for (const photo of scan.photos) {
+      // Les photos sont analysées 2 par 2, et les livres identifiés 8 à la fois.
+      await mapLimit(scan.photos, 2, async (photo) => {
         const jpeg = await getStorage().get(photo.storageKey);
         const detected = await detectBooks(jpeg, { language: scan.bookLanguage, mode: "shelf" });
 
-        await mapLimit(detected, 4, async (d) => {
+        await mapLimit(detected, 8, async (d) => {
           let book = d.isbn ? await findOrCreateBookByIsbn(d.isbn) : null;
           if (!book) {
             book = await findOrCreateBookByTitle({ title: d.title, author: d.author, language: scan.bookLanguage }).catch((e) => {
@@ -50,7 +51,6 @@ export async function processScan(scanId: string): Promise<void> {
               bookId: book?.id ?? null,
               rawTitle: d.title,
               rawAuthor: d.author,
-              spineText: d.spine_text,
               bbox: (d.bbox as unknown as Prisma.InputJsonObject) ?? undefined,
               polygon: (d.polygon as unknown as Prisma.InputJsonArray) ?? undefined,
               textDirection: d.text_direction,
@@ -58,7 +58,7 @@ export async function processScan(scanId: string): Promise<void> {
             },
           });
         });
-      }
+      });
     } else {
       // Scan par code-barres : la détection existe déjà, on rafraîchit les prix.
       const dets = await prisma.detection.findMany({ where: { scanId, bookId: { not: null } } });
