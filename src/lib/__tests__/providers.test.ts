@@ -74,6 +74,13 @@ describe("liens vers les annonces (fenêtre « … »)", () => {
     expect(links.find((l) => l.id === "amazon")!.url).toContain(encodeURIComponent("L'Étranger Camus"));
   });
 
+  it("ouvre directement la fiche Amazon du livre (ASIN = ISBN-10)", () => {
+    const amazon = (isbn13: string | null) => siteLinks({ isbn13, title: "Atlas 2000" }, []).find((l) => l.id === "amazon")!.url;
+    expect(amazon("9782091810386")).toBe("https://www.amazon.fr/dp/209181038X");
+    // Les ISBN en 979 n'ont pas d'ISBN-10 : on garde la recherche.
+    expect(amazon("9791032902561")).toBe("https://www.amazon.fr/s?k=9791032902561&i=stripbooks");
+  });
+
   it("choisit l'offre Amazon la moins chère", () => {
     expect(bestAmazonOffer([{ platform: "amazon", offerType: "NEW", priceCents: 900 }, { platform: "amazon", offerType: "USED", priceCents: 700 }, { platform: "ebay", offerType: "USED", priceCents: 100 }])?.priceCents).toBe(700);
     expect(bestAmazonOffer([])).toBeNull();

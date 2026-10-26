@@ -1,5 +1,6 @@
 // Les plateformes suivies, avec un lien de recherche public pour chacune.
 // Ouvrir ces liens dans ton navigateur est toujours autorisé : on ne lit pas la page côté serveur.
+import { isbn13To10 } from "../isbn";
 
 export interface Platform {
   id: string;
@@ -18,7 +19,11 @@ export const PLATFORMS: Platform[] = [
     name: "Amazon",
     color: "#ff9900",
     access: "Pas de scraping (CGU). Données via Keepa (payant, licencié) ou l'API Product Advertising (compte Partenaires requis).",
-    searchUrl: ({ isbn13 }) => `https://www.amazon.fr/s?k=${isbn13}&i=stripbooks`,
+    // Pour un livre, l'identifiant Amazon (ASIN) est son ISBN-10 : on ouvre directement sa fiche produit.
+    searchUrl: ({ isbn13 }) => {
+      const isbn10 = /^97[89]\d{10}$/.test(isbn13) ? isbn13To10(isbn13) : null;
+      return isbn10 ? `https://www.amazon.fr/dp/${isbn10}` : `https://www.amazon.fr/s?k=${isbn13}&i=stripbooks`;
+    },
   },
   {
     id: "fnac",

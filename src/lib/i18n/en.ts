@@ -124,6 +124,7 @@ export const en: Dict = {
     salesYear: "{n} sale(s) in 12 months",
     salesUnknown: "Sales in 12 months: unknown",
     currentlySold: "Currently sold at {price} · {n} offer(s)",
+    seeOnAmazon: "See prices on Amazon",
     buybackAgo: "{platform} bought back at {price} {age} ago",
     ratio: "Ratio",
     soldAgo: "Sold ago",
