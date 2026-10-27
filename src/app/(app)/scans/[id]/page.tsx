@@ -9,6 +9,10 @@ import { retryScanAction } from "@/app/actions";
 import { StatusBadge } from "@/components/StatusBadge";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { ScanViewer } from "@/components/ScanViewer";
+import { RefreshAllPrices } from "@/components/RefreshAllPrices";
+
+// « Actualiser tous les prix » interroge les sources pour chaque livre du scan.
+export const maxDuration = 300;
 
 const FLAGS: Record<string, string> = { FR: "🇫🇷", US: "🇺🇸", DE: "🇩🇪", GB: "🇬🇧", JP: "🇯🇵", CA: "🇨🇦", IT: "🇮🇹", ES: "🇪🇸" };
 
@@ -35,6 +39,9 @@ export default async function ScanPage({ params }: { params: Promise<{ id: strin
         <span className="text-sm text-slate-500">
           {scan.createdAt.toLocaleString(locale === "en" ? "en-GB" : "fr-FR")} · {scan.photos.length} 🖼 · {detections.length} 📖
         </span>
+        {!running && detections.some((d) => d.book) && (
+          <RefreshAllPrices scanId={scan.id} label={t.scan.refreshAllPrices} pendingLabel={t.scan.refreshingAllPrices} />
+        )}
       </div>
 
       {running && (

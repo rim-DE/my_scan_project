@@ -102,131 +102,171 @@ export function BookCard({ detection, photo, photos = [], t, country, lists, pat
     .filter((p) => p.offerType === "BUYBACK")
     .reduce<(typeof b.prices)[number] | null>((x, y) => (!x || y.priceCents > x.priceCents ? y : x), null);
 
+  const momoxUrl = PLATFORM_BY_ID.momox?.searchUrl({ isbn13: b.isbn13 ?? "", title: b.title });
+  const amazonText = amazonMin
+    ? fmt(t.book.currentlySoldShort, { price: fp(amazonMin.priceCents, amazonMin.currency), n: m.currentOfferCount || amazon.length })
+    : m.currentPriceCents !== null
+      ? fmt(t.book.currentlySoldShort, { price: fp(m.currentPriceCents), n: m.currentOfferCount })
+      : t.book.seeOnAmazon;
+  const footer = [
+    m.ratio !== null && (
+      <span key="ratio">
+        {t.book.ratio} <strong>{m.ratio.toLocaleString(loc)}</strong>
+      </span>
+    ),
+    b.listPriceCents !== null && (
+      <span key="list">
+        {t.book.publisherPrice} <strong>{fp(b.listPriceCents)}</strong>
+      </span>
+    ),
+    b.rating !== null && (
+      <span key="rating">
+        <span className="text-amber-500">★</span> {b.rating.toLocaleString(loc)}
+        {b.reviewCount !== null && ` (${b.reviewCount.toLocaleString(loc)})`}
+      </span>
+    ),
+    b.salesRank !== null && (
+      <span key="rank" title={t.book.salesRankHelp}>
+        {t.book.salesRank} <strong>#{b.salesRank.toLocaleString(loc)}</strong>
+      </span>
+    ),
+  ].filter(Boolean);
+
+  // Mise en page inspirée de BiblioScan : prix médian en grand, ventes, Amazon, rachat, puis les indicateurs.
   return (
     <article id={detection.id} className={`card space-y-4 ${ring}`}>
       {b.hasDemo && <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">⚠️ {t.book.demoWarning}</p>}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <div className="flex gap-4">
-          {b.coverUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={b.coverUrl} alt={b.title} className="h-44 w-32 shrink-0 rounded-lg object-cover shadow" />
-          ) : (
-            <div className="grid h-44 w-32 shrink-0 place-items-center rounded-lg bg-mint text-4xl">📕</div>
-          )}
-          <div className="min-w-0 space-y-1 text-sm">
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1 space-y-2">
+          <div>
             <h3 className="text-base font-semibold leading-tight">{b.title}</h3>
-            <p className="text-slate-600">
+            <p className="text-sm text-slate-600">
               {b.authors.join(", ")}
               {b.publisher && ` · ${b.publisher}`}
               {b.publishedDate && ` · ${b.publishedDate}`}
             </p>
-            <p title={t.book.netProfitHelp}>
-              {t.book.netProfit} : <strong>{fp(s.netAfterFeesCents)}</strong>
-            </p>
-            <p title={t.book.weightedProfitHelp}>
-              {t.book.weightedProfit} : <strong>{fp(m.weightedProfit30dCents)}</strong>
-            </p>
-            <p>
-              {t.book.salesMedian} : <strong>{fp(s.medianCents)}</strong>
-            </p>
-            <p>
-              {t.book.maxBuyLong} : <strong>{fp(s.maxBuyCents)}</strong>
-            </p>
-            <p className="font-semibold">{m.sales12m !== null ? fmt(t.book.salesYear, { n: m.sales12m }) : t.book.salesUnknown}</p>
-            {/* Toujours affiché : sans prix connu, c'est un raccourci vers la recherche Amazon de ce livre (par ISBN). */}
-            <p className="flex items-center gap-1.5 text-xs">
-              <SiteLogo id="amazon" color="#ff9900" size={18} />
-              <a href={amazonMin?.url ?? amazonSearchUrl} target="_blank" rel="noopener noreferrer" className="underline">
-                {amazonMin
-                  ? fmt(t.book.currentlySold, { price: fp(amazonMin.priceCents, amazonMin.currency), n: m.currentOfferCount || amazon.length })
-                  : m.currentPriceCents !== null
-                    ? fmt(t.book.currentlySold, { price: fp(m.currentPriceCents), n: m.currentOfferCount })
-                    : t.book.seeOnAmazon}
-              </a>
-            </p>
-            {buyback && (
-              <p className="flex items-center gap-1.5 text-xs">
-                <SiteLogo id={buyback.platform} color={PLATFORM_BY_ID[buyback.platform]?.color ?? "#56b146"} size={18} />
-                <a
-                  href={buyback.url ?? PLATFORM_BY_ID[buyback.platform]?.searchUrl({ isbn13: b.isbn13 ?? "", title: b.title })}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-green-700 underline"
-                >
-                  {fmt(t.book.buybackAgo, {
+          </div>
+          {spine}
+        </div>
+        {icons}
+      </div>
+
+      <div className="flex gap-4">
+        {b.coverUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={b.coverUrl} alt={b.title} className="h-48 w-32 shrink-0 rounded-lg object-cover shadow" />
+        ) : (
+          <div className="grid h-48 w-32 shrink-0 place-items-center rounded-lg bg-mint text-4xl">📕</div>
+        )}
+        <div className="min-w-0 flex-1 space-y-2">
+          {/* Sans vente connue, la médiane vient des offres en cours : on le dit. */}
+          <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
+            {m.sales.length > 0 ? t.book.salesMedian : t.book.offersMedian}
+          </p>
+          <p className="text-4xl font-bold leading-none">{fp(s.medianCents)}</p>
+          <p className="flex flex-wrap items-center gap-2 text-sm">
+            {m.sales12m !== null ? (
+              <>
+                <span className={`rounded-full px-3 py-1 font-semibold ${m.sales12m > 0 ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"}`}>
+                  {fmt(t.book.salesCount, { n: m.sales12m })}
+                </span>
+                <span className="text-slate-500">{t.book.in12Months}</span>
+              </>
+            ) : (
+              <span className="text-slate-500">{t.book.salesUnknown}</span>
+            )}
+          </p>
+          {m.sales12m === 0 && <p className="text-xs font-semibold text-amber-700">⚠️ {t.book.noSalesWarning}</p>}
+          {/* Toujours affiché : sans prix connu, c'est un raccourci vers la fiche Amazon de ce livre (par ISBN). */}
+          <a
+            href={amazonMin?.url ?? amazonSearchUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 rounded-xl bg-amber-900/10 px-3 py-2 text-sm font-medium text-amber-900 hover:bg-amber-900/15"
+          >
+            <SiteLogo id="amazon" color="#ff9900" size={22} />
+            <span>{amazonText}</span>
+          </a>
+          <a
+            href={buyback?.url ?? (buyback ? PLATFORM_BY_ID[buyback.platform]?.searchUrl({ isbn13: b.isbn13 ?? "", title: b.title }) : momoxUrl)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 rounded-xl border border-green-300 bg-green-50 px-3 py-2 text-sm font-medium text-green-800 hover:bg-green-100"
+          >
+            <SiteLogo id={buyback?.platform ?? "momox"} color={PLATFORM_BY_ID[buyback?.platform ?? "momox"]?.color ?? "#56b146"} size={22} />
+            <span>
+              {buyback
+                ? fmt(t.book.buybackAgo, {
                     platform: platformName(buyback.platform).toLowerCase(),
                     price: fp(buyback.priceCents, buyback.currency),
                     age: shortAge(buyback.observedAt, new Date(), locale),
-                  })}
-                </a>
-              </p>
-            )}
-            <p className="flex flex-wrap gap-x-4 text-xs text-slate-500">
-              {m.ratio !== null && (
-                <span>
-                  {t.book.ratio} : {m.ratio}
-                </span>
-              )}
-              {b.listPriceCents && (
-                <span>
-                  {t.book.publisherPrice} : {fp(b.listPriceCents)}
-                </span>
-              )}
-              {b.rating !== null && (
-                <span>
-                  ★ {b.rating.toLocaleString(loc)}
-                  {b.reviewCount !== null && ` (${b.reviewCount.toLocaleString(loc)})`}
-                </span>
-              )}
-              {b.salesRank !== null && (
-                <span title={t.book.salesRankHelp}>
-                  {t.book.salesRank} #{b.salesRank.toLocaleString(loc)}
-                </span>
-              )}
-            </p>
-            {(b.isbn13 || b.isbn10) && (
-              <p className="text-xs text-slate-500">
-                ▮▯▮ {b.isbn13}
-                {b.isbn10 && ` / ${b.isbn10}`}
-              </p>
-            )}
-          </div>
-        </div>
-
-        <div className="flex min-w-0 items-start gap-2">
-        <div className="min-w-0 flex-1 space-y-3">
-          {spine}
-          {m.lastSales.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="text-sm">
-                <tbody>
-                  <tr className="border-b border-slate-200">
-                    <th className="py-1 pr-3 text-left font-semibold text-slate-600">{t.book.soldAgo}</th>
-                    {m.lastSales.map((x, i) => (
-                      <td key={i} className="px-2 text-center text-slate-600">
-                        {shortAge(x.soldAt, new Date(), locale)}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr>
-                    <th className="py-1 pr-3 text-left font-semibold text-slate-600">{t.book.atPrice}</th>
-                    {m.lastSales.map((x, i) => (
-                      <td key={i} className="px-2 text-center font-medium">
-                        {fp(x.priceCents)}
-                      </td>
-                    ))}
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className="text-xs text-slate-500">{t.book.noSales}</p>
-          )}
-        </div>
-        {icons}
+                  })
+                : t.book.seeMomox}
+            </span>
+          </a>
         </div>
       </div>
+
+      {(b.isbn13 || b.isbn10) && (
+        <p className="flex flex-wrap gap-2 text-sm text-slate-600">
+          {b.isbn13 && <span className="rounded-full bg-slate-100 px-3 py-1">{b.isbn13}</span>}
+          {b.isbn10 && <span className="rounded-full bg-slate-100 px-3 py-1">▮▯▮ {b.isbn10}</span>}
+        </p>
+      )}
+
+      <div className="grid grid-cols-3 divide-x divide-slate-200 rounded-xl border border-slate-200 text-sm">
+        <div className="p-3" title={t.book.weightedProfitHelp}>
+          <p className="text-slate-500">{t.book.weightedProfitShort}</p>
+          <p className="mt-1 text-lg font-bold">{fp(m.weightedProfit30dCents)}</p>
+        </div>
+        <div className="p-3" title={t.book.netProfitHelp}>
+          <p className="text-slate-500">{t.book.netProfit}</p>
+          <p className={`mt-1 text-lg font-bold ${(s.netAfterFeesCents ?? 0) > 0 ? "text-green-700" : ""}`}>{fp(s.netAfterFeesCents)}</p>
+        </div>
+        <div className="p-3">
+          <p className="text-slate-500">{t.book.maxBuyShort}</p>
+          <p className="mt-1 text-lg font-bold">{fp(s.maxBuyCents)}</p>
+        </div>
+      </div>
+
+      {m.lastSales.length > 0 ? (
+        <div className="overflow-x-auto">
+          <table className="w-full border-separate border-spacing-0 overflow-hidden rounded-xl border border-slate-200 text-sm">
+            <tbody>
+              <tr>
+                <th className="border-b border-r border-slate-200 bg-slate-50 px-3 py-2 text-left font-semibold">{t.book.soldAgo}</th>
+                {m.lastSales.map((x, i) => (
+                  <td key={i} className="border-b border-r border-slate-200 px-2 py-2 text-center text-slate-600 last:border-r-0">
+                    {shortAge(x.soldAt, new Date(), locale)}
+                  </td>
+                ))}
+              </tr>
+              <tr>
+                <th className="border-r border-slate-200 bg-slate-50 px-3 py-2 text-left font-semibold">{t.book.atPrice}</th>
+                {m.lastSales.map((x, i) => (
+                  <td key={i} className="border-r border-slate-200 px-2 py-2 text-center font-bold last:border-r-0">
+                    {fp(x.priceCents)}
+                  </td>
+                ))}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="text-xs text-slate-500">{t.book.noSales}</p>
+      )}
+
+      {footer.length > 0 && (
+        <p className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-slate-600">
+          {footer.map((f, i) => (
+            <span key={i} className="flex gap-3">
+              {i > 0 && <span className="text-slate-300">|</span>}
+              {f}
+            </span>
+          ))}
+        </p>
+      )}
 
       {b.prices.length === 0 ? (
         <p className="text-sm text-slate-500">{t.book.noPrice}</p>
