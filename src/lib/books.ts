@@ -328,6 +328,6 @@ export async function lookupByTitle(query: { title: string; author?: string | nu
 }
 
 export function lookupCacheKey(title: string, author: string | null | undefined, language: string): string {
-  // "v4" : on oublie les « introuvables » enregistrés quand Google Books saturait.
-  return `v4|${language}|${normalizeText(title)}|${normalizeText(author ?? "")}`;
+  // "v5" : on oublie les « introuvables » enregistrés avant l'ajout de la BnF.
+  return `v5|${language}|${normalizeText(title)}|${normalizeText(author ?? "")}`;
 }
