@@ -52,11 +52,13 @@ export function netAfterFees(priceCents: number, s: ResaleSettings): number {
 }
 
 export function computeStats(points: PricePoint[], s: ResaleSettings, now = new Date()): PriceStats {
-  // Base de revente : les ventes réalisées si on en connaît (c'est le vrai "prix médian de vente"),
-  // sinon les offres d'occasion, et à défaut tous les prix "vente" (neuf inclus).
-  const yearAgo = now.getTime() - 365 * 24 * 3600 * 1000;
+  // Base de revente : les 5 dernières ventes si on en connaît, même anciennes (c'est le "prix médian de
+  // vente" de BiblioScan), sinon les offres d'occasion, et à défaut tous les prix "vente" (neuf inclus).
+  const when = (p: (typeof points)[number]) => (p.observedAt ? new Date(p.observedAt).getTime() : now.getTime());
   const sold = points
-    .filter((p) => p.offerType === "SOLD" && (!p.observedAt || new Date(p.observedAt).getTime() >= yearAgo))
+    .filter((p) => p.offerType === "SOLD")
+    .sort((a, b) => when(b) - when(a))
+    .slice(0, LAST_SALES)
     .map((p) => p.priceCents);
   const resale = sold.length > 0 ? sold : points.filter((p) => p.offerType === "USED").map((p) => p.priceCents);
   const base = resale.length > 0 ? resale : points.filter((p) => p.offerType === "NEW").map((p) => p.priceCents);
@@ -84,6 +86,9 @@ export function computeStats(points: PricePoint[], s: ResaleSettings, now = new 
     maxBuyCents: maxBuy,
   };
 }
+
+/** Nombre de ventes récentes dont on prend la médiane, comme BiblioScan. */
+export const LAST_SALES = 5;
 
 /** Coefficient appliqué au prix médian d'occasion selon l'état (référence : "très bon état"). */
 export const CONDITION_FACTORS: Record<Condition, number> = {

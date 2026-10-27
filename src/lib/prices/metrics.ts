@@ -104,7 +104,12 @@ export function computeMetrics(
 
   // Probabilité de vendre dans le mois : ventes mensuelles (moyenne sur 12 mois, ou sur les
   // 3 derniers mois si le livre s'est mis à mieux se vendre), plafonnées à 1.
-  const perMonth = sales12m !== null ? Math.max(sales12m / 12, recorded90d / 3) : null;
+  // Aucune vente cette année mais des ventes plus anciennes : comme BiblioScan, on prend le rythme
+  // des 5 dernières ventes (5 ventes en 2 ans ≈ 0,2 par mois) plutôt que zéro.
+  const last5 = allSold.slice(0, 5);
+  const oldPace =
+    !sales12m && last5.length > 0 ? last5.length / Math.max(1, (now.getTime() - last5[last5.length - 1].soldAt.getTime()) / (30.44 * DAY)) : 0;
+  const perMonth = sales12m !== null || oldPace > 0 ? Math.max((sales12m ?? 0) / 12, recorded90d / 3, oldPace) : null;
   const weightedProfit30dCents =
     stats.netAfterFeesCents !== null && perMonth !== null ? Math.round(stats.netAfterFeesCents * Math.min(1, perMonth)) : null;
 
@@ -115,7 +120,8 @@ export function computeMetrics(
   const currentOfferCount = book.offerCount ?? offers.length;
   const rank = biblioRank({
     netAfterFeesCents: stats.netAfterFeesCents,
-    sales12m,
+    // Le même rythme de ventes que pour le profit pondéré.
+    sales12m: perMonth !== null ? perMonth * 12 : null,
     offerCount: currentOfferCount,
     buybackCents: stats.buybackMaxCents,
   });
