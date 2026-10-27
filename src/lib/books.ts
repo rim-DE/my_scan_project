@@ -1,4 +1,5 @@
-// Identification d'un livre : Google Books en priorité, Open Library en secours.
+// Identification d'un livre : Google Books en priorité, puis la BnF (très complète pour les livres français),
+// puis Open Library.
 // Les deux sont des API publiques et gratuites, autorisées pour cet usage.
 import { normalizeIsbn } from "./isbn";
 import { env } from "./env";
@@ -14,7 +15,7 @@ export interface BookInfo {
   pageCount: number | null;
   coverUrl: string | null;
   listPriceCents: number | null;
-  source: "google" | "openlibrary";
+  source: "google" | "bnf" | "openlibrary";
 }
 
 // ---------- Similarité de titres ----------
@@ -177,6 +178,73 @@ async function openLibrarySearch(params: Record<string, string>): Promise<BookIn
   return (json.docs ?? []).map(parseOpenLibraryDoc).filter((b): b is BookInfo => b !== null);
 }
 
+// ---------- BnF (catalogue général de la Bibliothèque nationale de France) ----------
+// API SRU publique et gratuite : https://api.bnf.fr/fr/api-sru-catalogue-general
+
+const xmlText = (s: string) =>
+  s
+    .replace(/<[^>]+>/g, "")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&")
+    .trim();
+
+/** Lit les notices Dublin Core renvoyées par la BnF. */
+export function parseBnfRecords(xml: string): BookInfo[] {
+  const out: BookInfo[] = [];
+  for (const [, rec] of xml.matchAll(/<oai_dc:dc[^>]*>([\s\S]*?)<\/oai_dc:dc>/g)) {
+    const all = (tag: string) => [...rec.matchAll(new RegExp(`<dc:${tag}[^>]*>([\\s\\S]*?)<\\/dc:${tag}>`, "g"))].map((m) => xmlText(m[1]));
+    const rawTitle = all("title")[0];
+    if (!rawTitle) continue;
+    // « Sans un mot / Harlan Coben ; traduit de l'anglais… » → « Sans un mot »
+    const title = rawTitle.split(" / ")[0].replace(/\s*\[[^\]]*\]\s*/g, " ").trim();
+    // « Coben, Harlan (1962-....). Auteur du texte » → « Harlan Coben »
+    const authors = all("creator").map((c) => {
+      const name = c.replace(/\s*\(.*$/, "").replace(/\.\s*[A-ZÉ][^.]*$/, "").trim();
+      const [last, first] = name.split(",").map((x) => x.trim());
+      return first ? `${first} ${last}` : last;
+    });
+    const isbnRaw = all("identifier")
+      .map((id) => /ISBN\s*([\dXx-]{10,17})/.exec(id)?.[1])
+      .find((x): x is string => !!x);
+    const norm = isbnRaw ? normalizeIsbn(isbnRaw) : null;
+    const publisher = all("publisher")[0]?.replace(/\s*\(.*$/, "") ?? null;
+    const lang = all("language")[0];
+    out.push({
+      isbn13: norm?.isbn13 ?? null,
+      isbn10: norm?.isbn10 ?? null,
+      title,
+      authors,
+      publisher,
+      publishedDate: all("date")[0] ?? null,
+      language: lang ? (MARC_LANGUAGES[lang] ?? lang) : null,
+      pageCount: null,
+      coverUrl: null,
+      listPriceCents: null,
+      source: "bnf",
+    });
+  }
+  return out;
+}
+
+async function bnfSearch(title: string, author?: string | null): Promise<BookInfo[]> {
+  const q = (s: string) => `"${s.replace(/"/g, " ")}"`;
+  const url = new URL("https://catalogue.bnf.fr/api/SRU");
+  url.searchParams.set("version", "1.2");
+  url.searchParams.set("operation", "searchRetrieve");
+  url.searchParams.set("query", `bib.title all ${q(title)}` + (author ? ` and bib.author all ${q(author)}` : ""));
+  url.searchParams.set("recordSchema", "dublincore");
+  url.searchParams.set("maximumRecords", "15");
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error(`BnF HTTP ${res.status}`);
+  // Sans ISBN, pas de prix possible : on garde d'abord les éditions qui en ont un.
+  const found = parseBnfRecords(await res.text());
+  const withIsbn = found.filter((b) => b.isbn13);
+  return withIsbn.length ? withIsbn : found;
+}
+
 // ---------- API publique ----------
 
 /**
@@ -233,6 +301,17 @@ export async function lookupByTitle(query: { title: string; author?: string | nu
     googleFailed = true;
     console.warn("[books] Google Books indisponible", e);
   }
+  // La BnF connaît presque tous les livres publiés en France.
+  let bnfFailed = false;
+  try {
+    let found = pickBest(query, await bnfSearch(query.title, query.author));
+    // Un auteur mal lu sur la tranche ne doit pas tout bloquer : on réessaie avec le titre seul.
+    if (!found && query.author) found = pickBest(query, await bnfSearch(query.title));
+    if (found) return found;
+  } catch (e) {
+    bnfFailed = true;
+    console.warn("[books] BnF indisponible", e);
+  }
   const params: Record<string, string> = { title: query.title };
   if (query.author) params.author = query.author;
   let found: BookInfo | null = null;
@@ -240,11 +319,11 @@ export async function lookupByTitle(query: { title: string; author?: string | nu
     found = pickBest(query, await openLibrarySearch(params));
   } catch (e) {
     console.warn("[books] Open Library indisponible", e);
-    if (googleFailed) throw new CatalogUnavailableError();
+    if (googleFailed && bnfFailed) throw new CatalogUnavailableError();
   }
-  // Google n'a pas répondu et Open Library (moins complet pour les livres français) ne trouve rien :
-  // on ne conclut pas « introuvable », pour ne pas le garder en cache.
-  if (!found && googleFailed) throw new CatalogUnavailableError();
+  // Un catalogue n'a pas répondu et les autres ne trouvent rien : on ne conclut pas « introuvable »,
+  // pour ne pas le garder en cache.
+  if (!found && (googleFailed || bnfFailed)) throw new CatalogUnavailableError();
   return found;
 }
 

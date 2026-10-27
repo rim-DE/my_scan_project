@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CatalogUnavailableError, lookupByTitle, lookupCacheKey, normalizeText, parseGoogleVolume, parseOpenLibraryDoc, scoreCandidate, similarity, MIN_MATCH_SCORE } from "../books";
+import { CatalogUnavailableError, lookupByTitle, parseBnfRecords, lookupCacheKey, normalizeText, parseGoogleVolume, parseOpenLibraryDoc, scoreCandidate, similarity, MIN_MATCH_SCORE } from "../books";
 
 describe("identification des livres", () => {
   it("normalise le texte (accents, ponctuation)", () => {
@@ -100,5 +100,50 @@ describe("recherche par titre quand Google Books sature", () => {
     const check = expect(p).rejects.toBeInstanceOf(CatalogUnavailableError);
     await vi.runAllTimersAsync();
     await check;
+  });
+});
+
+describe("catalogue de la BnF", () => {
+  const record = (body: string) =>
+    `<srw:record><srw:recordData><oai_dc:dc xmlns:oai_dc="http://www.openarchives.org/OAI/2.0/oai_dc/" xmlns:dc="http://purl.org/dc/elements/1.1/">${body}</oai_dc:dc></srw:recordData></srw:record>`;
+  const xml = `<srw:searchRetrieveResponse><srw:records>${record(`
+      <dc:title>Sans un mot / Harlan Coben ; traduit de l'anglais (États-Unis) par Roxane Azimi</dc:title>
+      <dc:creator>Coben, Harlan (1962-....). Auteur du texte</dc:creator>
+      <dc:creator>Azimi, Roxane. Traducteur</dc:creator>
+      <dc:publisher>Pocket (Paris)</dc:publisher>
+      <dc:date>2010</dc:date>
+      <dc:identifier>https://catalogue.bnf.fr/ark:/12148/cb42195467z</dc:identifier>
+      <dc:identifier>ISBN 978-2-266-19688-8</dc:identifier>
+      <dc:language>fre</dc:language>`)}${record(`
+      <dc:title>C'était toi [Texte imprimé] / Mary Higgins Clark</dc:title>
+      <dc:creator>Higgins Clark, Mary (1927-2020). Auteur du texte</dc:creator>
+      <dc:language>fre</dc:language>`)}</srw:records></srw:searchRetrieveResponse>`;
+
+  it("lit titre, auteurs, éditeur, langue et ISBN des notices", () => {
+    const [coben, clark] = parseBnfRecords(xml);
+    expect(coben).toMatchObject({
+      title: "Sans un mot",
+      authors: ["Harlan Coben", "Roxane Azimi"],
+      publisher: "Pocket",
+      publishedDate: "2010",
+      language: "fr",
+      isbn13: "9782266196888",
+      source: "bnf",
+    });
+    expect(clark).toMatchObject({ title: "C'était toi", authors: ["Mary Higgins Clark"], isbn13: null });
+    expect(scoreCandidate({ title: "Sans un mot", author: "Harlan Coben", language: "fr" }, coben)).toBeGreaterThan(MIN_MATCH_SCORE);
+  });
+
+  it("identifie le livre par la BnF quand Google Books sature", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: URL) => (String(url).includes("googleapis") ? new Response("{}", { status: 429 }) : new Response(xml))),
+    );
+    const p = lookupByTitle({ title: "Sans un mot", author: "Harlan Coben", language: "fr" });
+    await vi.runAllTimersAsync();
+    expect((await p)?.isbn13).toBe("9782266196888");
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 });
