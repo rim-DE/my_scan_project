@@ -8,17 +8,24 @@
  */
 export type PriceStatus = "waiting" | "notFound" | "ok" | "noSource";
 
-export function priceStatus(
-  fetches: { provider: string; ok: boolean }[],
-  priceCount: number,
-  providerIds: string[],
-): PriceStatus {
+type Fetch = { provider: string; ok: boolean; fetchedAt: Date };
+
+/**
+ * Les réponses vides reçues avant que Keepa sache chercher une autre édition par titre
+ * (livre identifié avec l'ISBN d'une édition France Loisirs ou numérique) sont redemandées une fois.
+ */
+export const EMPTY_RETRY_BEFORE = new Date("2026-10-27T20:00:00Z");
+
+export function priceStatus(fetches: Fetch[], priceCount: number, providerIds: string[]): PriceStatus {
   if (priceCount > 0) return "ok";
   if (providerIds.length === 0) return "noSource";
-  return providerIds.every((id) => fetches.some((f) => f.provider === id && f.ok)) ? "notFound" : "waiting";
+  return needsFetch(fetches, providerIds, priceCount) ? "waiting" : "notFound";
 }
 
-/** Le livre a une source qui n'a pas encore répondu correctement. */
-export function needsFetch(fetches: { provider: string; ok: boolean }[], providerIds: string[]): boolean {
-  return providerIds.some((id) => !fetches.some((f) => f.provider === id && f.ok));
+/** Le livre a une source qui n'a pas encore répondu correctement (ou une vieille réponse vide à redemander). */
+export function needsFetch(fetches: Fetch[], providerIds: string[], priceCount: number): boolean {
+  return providerIds.some((id) => {
+    const f = fetches.find((x) => x.provider === id);
+    return !f?.ok || (priceCount === 0 && f.fetchedAt < EMPTY_RETRY_BEFORE);
+  });
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pickKeepaMatch } from "../prices/providers/keepa";
+import { pickKeepaMatch, romanOrdinal } from "../prices/providers/keepa";
 
 const book = { title: "Dictionnaire des mots, des phrases, des images", authors: ["Aimé Gabillon"] };
 
@@ -17,5 +17,25 @@ describe("pickKeepaMatch (livres sans ISBN)", () => {
   it("refuse un autre auteur ou un titre trop différent", () => {
     expect(pickKeepaMatch(book, [{ asin: "X4", title: "Dictionnaire des mots, des phrases, des images", author: "Dupont" }])).toBeNull();
     expect(pickKeepaMatch(book, [{ asin: "X5", title: "Dictionnaire des images", author: "Gabillon" }])).toBeNull();
+  });
+});
+
+describe("pickKeepaMatch (autre édition)", () => {
+  it("relie XXIe à 21e et prend l'édition la plus vendue", () => {
+    const kit = { title: "Le Kit du XXIe siècle", authors: ["François Reynaert", "Vincent Brocvielle"] };
+    const p = pickKeepaMatch(kit, [
+      { asin: "A", title: "Le kit du 21e siècle", author: "Reynaert", stats: { current: [0, 0, 0, 900000] } },
+      { asin: "B", title: "Le kit du 21e siècle (poche)", author: "François Reynaert", stats: { current: [0, 0, 0, 120000] } },
+      { asin: "C", title: "Le kit du 21e siècle", author: "Reynaert" },
+    ]);
+    expect(p?.asin).toBe("B");
+  });
+});
+
+describe("romanOrdinal", () => {
+  it("convertit les siècles en chiffres romains", () => {
+    expect(romanOrdinal("xxie")).toBe("21e");
+    expect(romanOrdinal("xixe")).toBe("19e");
+    expect(romanOrdinal("siecle")).toBe("siecle");
   });
 });

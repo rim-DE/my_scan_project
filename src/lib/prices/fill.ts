@@ -14,11 +14,15 @@ export async function booksMissingPrices(scanId: string, country: string): Promi
   if (ids.length === 0) return [];
   const books = await prisma.book.findMany({
     where: { detections: { some: { scanId } } },
-    select: { id: true, fetches: { where: { country }, select: { provider: true, ok: true, fetchedAt: true } } },
+    select: {
+      id: true,
+      fetches: { where: { country }, select: { provider: true, ok: true, fetchedAt: true } },
+      _count: { select: { prices: { where: { country } } } },
+    },
   });
   const oldest = (b: (typeof books)[number]) => Math.min(Infinity, ...b.fetches.map((f) => f.fetchedAt.getTime()));
   return books
-    .filter((b) => needsFetch(b.fetches, ids))
+    .filter((b) => needsFetch(b.fetches, ids, b._count.prices))
     .sort((a, b) => Math.sign(a.fetches.length) - Math.sign(b.fetches.length) || oldest(a) - oldest(b))
     .map((b) => b.id);
 }

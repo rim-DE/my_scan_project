@@ -210,6 +210,7 @@ export function BookCard({ detection, photo, photos = [], t, country, lists, pat
             <SiteLogo id="amazon" color="#ff9900" size={22} />
             <span>{amazonText}</span>
           </a>
+          {b.otherEdition && <p className="text-xs text-slate-500">{t.book.otherEdition}</p>}
           <a
             href={buyback?.url ?? (buyback ? PLATFORM_BY_ID[buyback.platform]?.searchUrl({ isbn13: b.isbn13 ?? "", title: b.title }) : momoxUrl)}
             target="_blank"

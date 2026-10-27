@@ -184,6 +184,7 @@ export const en: Dict = {
     salesYear: "{n} sale(s) in 12 months",
     salesUnknown: "Sales in 12 months: unknown",
     currentlySold: "Currently sold at {price} · {n} offer(s)",
+    otherEdition: "Prices of the edition sold on Amazon (same title, same author): this ISBN is not sold there.",
     seeOnAmazon: "See prices on Amazon",
     currentlySoldShort: "Currently sold at: {price} · {n} offer(s)",
     seeMomox: "See Momox buyback price",
