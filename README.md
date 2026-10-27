@@ -146,7 +146,7 @@ Toutes sont décrites dans [`.env.example`](.env.example).
 
 Plutôt un stockage S3 (Cloudflare R2, Scaleway…) ? Crée un bucket et une clé « lecture/écriture », puis renseigne `STORAGE_DRIVER=s3` et les variables `S3_*` (pour R2 : `S3_REGION=auto`, `S3_ENDPOINT=https://<id-de-compte>.r2.cloudflarestorage.com`).
 
-Rien d'autre à lancer : Vercel utilise le script `vercel-build`, qui applique les migrations (`prisma migrate deploy`) avant chaque build.
+Rien d'autre à lancer : Vercel utilise le script `vercel-build`, qui applique les migrations (`scripts/migrate.mjs`) avant le build de production. Les aperçus de PR n'y touchent pas (ils partagent la même base). La connexion se fait sans le « pooler » de Neon, avec 3 essais.
 
 Points propres à Vercel :
 
