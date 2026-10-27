@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pickKeepaMatch, romanOrdinal } from "../prices/providers/keepa";
+import { keepaBookInfo, pickKeepaMatch, romanOrdinal } from "../prices/providers/keepa";
 
 const book = { title: "Dictionnaire des mots, des phrases, des images", authors: ["Aimé Gabillon"] };
 
@@ -37,5 +37,18 @@ describe("romanOrdinal", () => {
     expect(romanOrdinal("xxie")).toBe("21e");
     expect(romanOrdinal("xixe")).toBe("19e");
     expect(romanOrdinal("siecle")).toBe("siecle");
+  });
+});
+
+describe("keepaBookInfo (identification par Amazon)", () => {
+  it("lit le titre sans la mention de format, les auteurs et l'ISBN", () => {
+    const info = keepaBookInfo({
+      title: "Survivre sans écrans (quand on est ado) - Broché",
+      author: "Jean Dupont, Marie Durand",
+      eanList: ["3000000000001", "9782000000001"],
+    });
+    expect(info?.title).toBe("Survivre sans écrans (quand on est ado)");
+    expect(info?.authors).toEqual(["Jean Dupont", "Marie Durand"]);
+    expect(info?.isbn13).toBe("9782000000001");
   });
 });
