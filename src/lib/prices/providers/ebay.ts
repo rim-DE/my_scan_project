@@ -79,6 +79,8 @@ export const ebayProvider: PriceProvider = {
   source: "api",
   enabled: () => Boolean(env.ebayClientId() && env.ebayClientSecret()),
   async fetch(book, country) {
+    // eBay ne cherche que par code-barres.
+    if (!book.isbn13) return { observations: [] };
     const mp = MARKETPLACES[country] ?? MARKETPLACES.FR;
     const url = new URL("https://api.ebay.com/buy/browse/v1/item_summary/search");
     url.searchParams.set("gtin", book.isbn13);

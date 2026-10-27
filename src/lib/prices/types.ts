@@ -35,13 +35,17 @@ export interface BookInfo {
 
 export interface ProviderResult {
   observations: PriceObservation[];
+  /** Fiche Amazon trouvée par recherche de titre (livre sans ISBN), à retenir pour la prochaine fois. */
+  asin?: string;
   sales?: SalesEstimate;
   info?: BookInfo;
 }
 
 export interface BookRef {
-  isbn13: string;
+  /** null pour un livre sans ISBN (édition ancienne) : seules les sources qui cherchent par titre répondent. */
+  isbn13: string | null;
   isbn10: string | null;
+  asin?: string | null;
   title: string;
   authors: string[];
 }
