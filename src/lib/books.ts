@@ -15,7 +15,7 @@ export interface BookInfo {
   pageCount: number | null;
   coverUrl: string | null;
   listPriceCents: number | null;
-  source: "google" | "bnf" | "openlibrary";
+  source: "google" | "bnf" | "openlibrary" | "amazon";
 }
 
 // ---------- Similarité de titres ----------
@@ -291,6 +291,9 @@ function pickBest(query: { title: string; author?: string | null; language?: str
 }
 
 export async function lookupByTitle(query: { title: string; author?: string | null; language?: string }): Promise<BookInfo | null> {
+  // Les parenthèses et guillemets du titre lu (« Survivre sans écrans (quand on est ado) ») gênent les moteurs de recherche.
+  const clean = (s: string) => s.replace(/[()[\]"«»]/g, " ").replace(/\s+/g, " ").trim();
+  query = { ...query, title: clean(query.title) };
   const q = `intitle:${query.title}` + (query.author ? ` inauthor:${query.author}` : "");
   let googleFailed = false;
   try {
@@ -321,13 +324,47 @@ export async function lookupByTitle(query: { title: string; author?: string | nu
     console.warn("[books] Open Library indisponible", e);
     if (googleFailed && bnfFailed) throw new CatalogUnavailableError();
   }
+  if (!found) found = await amazonSearch(query);
   // Un catalogue n'a pas répondu et les autres ne trouvent rien : on ne conclut pas « introuvable »,
   // pour ne pas le garder en cache.
   if (!found && (googleFailed || bnfFailed)) throw new CatalogUnavailableError();
   return found;
 }
 
+/**
+ * Dernier recours : la fiche Amazon (via Keepa, 10 jetons), comme BiblioScan.
+ * Seulement si le titre a été lu (pas « Auteur (titre illisible) »).
+ */
+async function amazonSearch(query: { title: string; author?: string | null; language?: string }): Promise<BookInfo | null> {
+  if (!env.keepaApiKey() || /illisible/i.test(query.title)) return null;
+  if (titleSimilarity(query.title, query.title, query.author ? [query.author] : []) === 0) return null;
+  try {
+    const { keepaSearch, keepaBookInfo } = await import("./prices/providers/keepa");
+    const candidates = (await keepaSearch(query.title, query.author)).flatMap((p) => {
+      const info = keepaBookInfo(p);
+      if (!info) return [];
+      const norm = info.isbn13 ? normalizeIsbn(info.isbn13) : null;
+      return [
+        {
+          ...info,
+          isbn13: norm?.isbn13 ?? null,
+          isbn10: norm?.isbn10 ?? null,
+          publishedDate: null,
+          language: null,
+          pageCount: null,
+          listPriceCents: null,
+          source: "amazon" as const,
+        },
+      ];
+    });
+    return pickBest(query, candidates);
+  } catch (e) {
+    console.warn("[books] recherche Amazon impossible", e);
+    return null;
+  }
+}
+
 export function lookupCacheKey(title: string, author: string | null | undefined, language: string): string {
-  // "v5" : on oublie les « introuvables » enregistrés avant l'ajout de la BnF.
-  return `v5|${language}|${normalizeText(title)}|${normalizeText(author ?? "")}`;
+  // "v6" : on oublie les « introuvables » enregistrés avant la recherche sur Amazon.
+  return `v6|${language}|${normalizeText(title)}|${normalizeText(author ?? "")}`;
 }

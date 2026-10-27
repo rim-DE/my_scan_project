@@ -16,10 +16,13 @@ const DOMAINS: Record<string, { id: number; currency: string; host: string }> = 
   ES: { id: 9, currency: "EUR", host: "amazon.es" },
 };
 
-interface KeepaProduct {
+export interface KeepaProduct {
   asin?: string;
   title?: string;
   author?: string;
+  /** Codes-barres EAN (pour un livre : l'ISBN-13). */
+  eanList?: string[];
+  manufacturer?: string;
   /** Historiques : csv[type] = [temps Keepa, valeur, temps Keepa, valeur, …]. */
   csv?: (number[] | null)[];
   stats?: { current?: number[]; salesRankDrops30?: number; salesRankDrops365?: number };
@@ -184,19 +187,7 @@ async function keepaGet(url: URL): Promise<Response> {
 
 /** Recherche Amazon par titre et auteur (10 jetons), pour les livres sans ISBN ou dont l'ISBN n'est pas vendu sur Amazon. */
 async function searchByTitle(book: BookRef, country: string): Promise<ProviderResult> {
-  const d = DOMAINS[country] ?? DOMAINS.FR;
-  const url = new URL("https://api.keepa.com/search");
-  url.searchParams.set("domain", String(d.id));
-  url.searchParams.set("type", "product");
-  // « XXIe » s'écrit souvent « 21e » sur Amazon ; le nom de famille de l'auteur suffit.
-  const title = normalizeText(book.title).split(" ").map(romanOrdinal).join(" ");
-  const surname = book.authors[0] ? normalizeText(book.authors[0]).split(" ").at(-1) : "";
-  url.searchParams.set("term", `${title} ${surname}`.trim());
-  url.searchParams.set("stats", "90");
-  url.searchParams.set("rating", "1");
-  const res = await keepaGet(url);
-  const json = (await res.json()) as { products?: KeepaProduct[] };
-  const p = pickKeepaMatch(book, json.products ?? []);
+  const p = pickKeepaMatch(book, await keepaSearch(book.title, book.authors[0], country));
   if (!p?.asin) return { observations: [] };
   return { ...productResult(p, country), asin: p.asin };
 }
@@ -230,4 +221,41 @@ export function romanOrdinal(w: string): string {
   const digits = [...m[1]].map((c) => ROMAN[c]);
   const n = digits.reduce((sum, v, i) => sum + (v < (digits[i + 1] ?? 0) ? -v : v), 0);
   return `${n}e`;
+}
+
+/** Recherche de livres sur Amazon via Keepa (10 jetons). Sert aussi à identifier les livres que les catalogues ne trouvent pas. */
+export async function keepaSearch(title: string, author: string | null | undefined, country = "FR"): Promise<KeepaProduct[]> {
+  const d = DOMAINS[country] ?? DOMAINS.FR;
+  const url = new URL("https://api.keepa.com/search");
+  url.searchParams.set("domain", String(d.id));
+  url.searchParams.set("type", "product");
+  // « XXIe » s'écrit souvent « 21e » sur Amazon ; le nom de famille de l'auteur suffit.
+  const words = normalizeText(title).split(" ").map(romanOrdinal).join(" ");
+  const surname = author ? normalizeText(author).split(" ").at(-1) : "";
+  url.searchParams.set("term", `${words} ${surname}`.trim());
+  url.searchParams.set("stats", "90");
+  url.searchParams.set("rating", "1");
+  const res = await keepaGet(url);
+  const json = (await res.json()) as { products?: KeepaProduct[] };
+  return json.products ?? [];
+}
+
+/** Fiche Amazon → infos du livre (titre, auteur, ISBN), pour l'identification. */
+export function keepaBookInfo(p: KeepaProduct): {
+  title: string;
+  authors: string[];
+  isbn13: string | null;
+  publisher: string | null;
+  coverUrl: string | null;
+} | null {
+  if (!p.title) return null;
+  const isbn13 = p.eanList?.find((e) => /^97[89]\d{10}$/.test(e)) ?? null;
+  return {
+    // « Survivre sans écrans (quand on est ado) - Broché » → sans la mention de format
+    title: p.title.replace(/\s+[-–]\s+(broché|poche|relié|format kindle|paperback|hardcover).*$/i, "").trim(),
+    authors: p.author ? p.author.split(/\s*[,;&]\s*|\s+et\s+/).filter(Boolean) : [],
+    isbn13,
+    publisher: p.manufacturer ?? null,
+    coverUrl: keepaCoverUrl(p),
+  };
 }
