@@ -34,8 +34,25 @@ export interface BookMetrics {
   expected90dCents: number | null;
   /** Score de 0 à 100 qui classe les livres à acheter en premier (voir biblioRank). */
   biblioRank: number | null;
-  /** « Pépite » : profit pondéré sur 30 jours au-dessus du seuil (20 € par défaut). */
+  /** « Pépite » : livre « intéressant » à la revente selon les critères de BiblioScan (voir isInteresting). */
   banger: boolean;
+}
+
+/** Critères BiblioScan d'un livre « intéressant » à la revente. */
+export const INTERESTING = { minMedianCents: 3500, minSales12m: 3, minRatio: 1.2, minCurrentOfferCents: 2700 };
+
+/**
+ * Livre « intéressant » (BiblioScan) : prix ≥ 35 €, au moins 3 ventes sur 12 mois, ratio ≥ 1,2,
+ * et offre actuelle absente ou ≥ 27 € (personne ne le brade en ce moment).
+ */
+export function isInteresting(x: { medianCents: number | null; sales12m: number | null; ratio: number | null; currentPriceCents: number | null }): boolean {
+  return (
+    x.medianCents !== null &&
+    x.medianCents >= INTERESTING.minMedianCents &&
+    (x.sales12m ?? 0) >= INTERESTING.minSales12m &&
+    (x.ratio ?? 0) >= INTERESTING.minRatio &&
+    (x.currentPriceCents === null || x.currentPriceCents >= INTERESTING.minCurrentOfferCents)
+  );
 }
 
 /** Échelle du score : un gain espéré de 10 € donne environ 63/100, 20 € environ 86/100. */
@@ -72,7 +89,6 @@ export function computeMetrics(
   stats: PriceStats,
   book: { listPriceCents: number | null; sales12m: number | null; sales30d: number | null; offerCount?: number | null },
   now = new Date(),
-  opts: { bangerMinProfitCents?: number } = {},
 ): BookMetrics {
   const allSold = points
     .filter((p) => p.offerType === "SOLD")
@@ -105,6 +121,7 @@ export function computeMetrics(
   });
 
   const toRow = (p: (typeof allSold)[number]) => ({ priceCents: p.priceCents, soldAt: p.soldAt.toISOString(), platform: p.platform });
+  const currentPriceCents = offers.length ? Math.min(...offers.map((p) => p.priceCents)) : null;
   return {
     sales12m,
     sales30d,
@@ -113,11 +130,11 @@ export function computeMetrics(
     sales: sold.map(toRow),
     weightedProfit30dCents,
     ratio,
-    currentPriceCents: offers.length ? Math.min(...offers.map((p) => p.priceCents)) : null,
+    currentPriceCents,
     // Le nombre réel d'offres (Keepa) quand on le connaît, sinon les offres relevées.
     currentOfferCount,
     ...rank,
-    banger: weightedProfit30dCents !== null && weightedProfit30dCents >= (opts.bangerMinProfitCents ?? 2000),
+    banger: isInteresting({ medianCents: stats.medianCents, sales12m, ratio, currentPriceCents }),
   };
 }
 

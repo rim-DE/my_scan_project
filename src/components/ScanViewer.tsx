@@ -7,6 +7,8 @@ import type { DetectionView } from "@/lib/queries";
 import { boxToQuad } from "@/lib/geometry";
 import { BookCard } from "./BookCard";
 import { BangerPopup } from "./BangerPopup";
+import { ScanFilters } from "./ScanFilters";
+import { DEFAULT_FILTERS, activeFilterCount, loadSavedFilters, passesFilters, saveFilters, smallSpines, type Filters } from "@/lib/filters";
 
 interface PhotoInfo {
   id: string;
@@ -100,6 +102,12 @@ export function ScanViewer({ photos, detections, t, country, lists, path, locale
     [detections],
   );
   const [showBangers, setShowBangers] = useState(false);
+  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+  const [showFilters, setShowFilters] = useState(false);
+  const small = useMemo(() => smallSpines(detections, photos), [detections, photos]);
+
+  // Filtres gardés « pour tous les scans » (dans ce navigateur).
+  useEffect(() => setFilters(loadSavedFilters()), []);
 
   // À la fin du scan, on présente les pépites une seule fois (mémorisé dans le navigateur).
   useEffect(() => {
@@ -117,6 +125,7 @@ export function ScanViewer({ photos, detections, t, country, lists, path, locale
   const shown = useMemo(() => {
     const needle = q.toLowerCase();
     const filtered = detections.filter((d) =>
+      passesFilters(d, filters, small) &&
       // « Hors stock » : on cache les livres que tu as déjà ; « Pépites » : on ne garde qu'elles.
       !(sort === "outOfStock" && d.inStock) &&
       !(sort === "bangers" && !d.book?.metrics.banger) &&
@@ -125,7 +134,8 @@ export function ScanViewer({ photos, detections, t, country, lists, path, locale
       ),
     );
     return sort === "position" ? filtered : [...filtered].sort((a, b) => sortKey(b, sort) - sortKey(a, sort));
-  }, [detections, q, sort]);
+  }, [detections, q, sort, filters, small]);
+  const activeFilters = activeFilterCount(filters);
 
   const photoById = Object.fromEntries(photos.map((p) => [p.id, p]));
 
@@ -213,6 +223,10 @@ export function ScanViewer({ photos, detections, t, country, lists, path, locale
             <button className="btn-primary" onClick={exportCsv}>
               {t.scan.export}
             </button>
+            <button className="btn rounded-full border border-slate-300 bg-white" onClick={() => setShowFilters(true)}>
+              ⚙️ {t.scan.filters.button}
+              {activeFilters > 0 && <span className="ml-1 rounded-full bg-brand px-2 text-xs text-white">{activeFilters}</span>}
+            </button>
             {bangers.length > 0 && (
               <button className="btn rounded-full bg-yellow-400 font-semibold text-yellow-950" onClick={() => setShowBangers(true)}>
                 {fmt(t.scan.bangersButton, { n: bangers.length })}
@@ -254,6 +268,25 @@ export function ScanViewer({ photos, detections, t, country, lists, path, locale
           />
         ))}
       </div>
+
+      {showFilters && (
+        <ScanFilters
+          detections={detections}
+          filters={filters}
+          t={t}
+          locale={locale}
+          onClose={() => setShowFilters(false)}
+          onApply={(f) => {
+            setFilters(f);
+            setShowFilters(false);
+          }}
+          onSaveForAll={(f) => {
+            saveFilters(f);
+            setFilters(f);
+            setShowFilters(false);
+          }}
+        />
+      )}
 
       {showBangers && bangers.length > 0 && (
         <BangerPopup
