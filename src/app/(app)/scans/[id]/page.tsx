@@ -73,6 +73,8 @@ export default async function ScanPage({ params }: { params: Promise<{ id: strin
         lists={lists}
         path={`/scans/${scan.id}`}
         locale={locale}
+        scanId={scan.id}
+        running={running}
       />
     </>
   );

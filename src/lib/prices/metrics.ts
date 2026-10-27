@@ -19,7 +19,7 @@ export interface BookMetrics {
   /** Nombre de ventes sur 12 mois / 30 jours (source : Keepa si configuré, sinon les ventes enregistrées). */
   sales12m: number | null;
   sales30d: number | null;
-  /** Les 5 ventes les plus récentes, de la plus récente à la plus ancienne. */
+  /** Les 5 ventes les plus récentes, de la plus récente à la plus ancienne (même au-delà de 12 mois). */
   lastSales: SaleRow[];
   /** Toutes les ventes des 12 derniers mois (historique), de la plus récente à la plus ancienne. */
   sales: SaleRow[];
@@ -34,6 +34,8 @@ export interface BookMetrics {
   expected90dCents: number | null;
   /** Score de 0 à 100 qui classe les livres à acheter en premier (voir biblioRank). */
   biblioRank: number | null;
+  /** « Pépite » : profit pondéré sur 30 jours au-dessus du seuil (20 € par défaut). */
+  banger: boolean;
 }
 
 /** Échelle du score : un gain espéré de 10 € donne environ 63/100, 20 € environ 86/100. */
@@ -70,20 +72,23 @@ export function computeMetrics(
   stats: PriceStats,
   book: { listPriceCents: number | null; sales12m: number | null; sales30d: number | null; offerCount?: number | null },
   now = new Date(),
+  opts: { bangerMinProfitCents?: number } = {},
 ): BookMetrics {
-  const sold = points
+  const allSold = points
     .filter((p) => p.offerType === "SOLD")
     .map((p) => ({ priceCents: p.priceCents, soldAt: new Date(p.observedAt), platform: p.platform }))
-    .filter((p) => now.getTime() - p.soldAt.getTime() <= 365 * DAY)
     .sort((a, b) => b.soldAt.getTime() - a.soldAt.getTime());
+  const sold = allSold.filter((p) => now.getTime() - p.soldAt.getTime() <= 365 * DAY);
   const recorded30d = sold.filter((p) => now.getTime() - p.soldAt.getTime() <= 30 * DAY).length;
+  const recorded90d = sold.filter((p) => now.getTime() - p.soldAt.getTime() <= 90 * DAY).length;
 
   // Une source de ventes (Keepa) l'emporte sur nos propres relevés, forcément incomplets.
   const sales12m = book.sales12m ?? (sold.length > 0 ? sold.length : null);
   const sales30d = book.sales30d ?? (sold.length > 0 ? recorded30d : null);
 
-  // Probabilité de vendre dans le mois : ventes mensuelles moyennes, plafonnées à 1.
-  const perMonth = sales12m !== null ? sales12m / 12 : null;
+  // Probabilité de vendre dans le mois : ventes mensuelles (moyenne sur 12 mois, ou sur les
+  // 3 derniers mois si le livre s'est mis à mieux se vendre), plafonnées à 1.
+  const perMonth = sales12m !== null ? Math.max(sales12m / 12, recorded90d / 3) : null;
   const weightedProfit30dCents =
     stats.netAfterFeesCents !== null && perMonth !== null ? Math.round(stats.netAfterFeesCents * Math.min(1, perMonth)) : null;
 
@@ -99,18 +104,20 @@ export function computeMetrics(
     buybackCents: stats.buybackMaxCents,
   });
 
-  const rows = sold.map((p) => ({ priceCents: p.priceCents, soldAt: p.soldAt.toISOString(), platform: p.platform }));
+  const toRow = (p: (typeof allSold)[number]) => ({ priceCents: p.priceCents, soldAt: p.soldAt.toISOString(), platform: p.platform });
   return {
     sales12m,
     sales30d,
-    lastSales: rows.slice(0, 5),
-    sales: rows,
+    // Même sans vente cette année, on montre les dernières connues, comme BiblioScan.
+    lastSales: allSold.slice(0, 5).map(toRow),
+    sales: sold.map(toRow),
     weightedProfit30dCents,
     ratio,
     currentPriceCents: offers.length ? Math.min(...offers.map((p) => p.priceCents)) : null,
     // Le nombre réel d'offres (Keepa) quand on le connaît, sinon les offres relevées.
     currentOfferCount,
     ...rank,
+    banger: weightedProfit30dCents !== null && weightedProfit30dCents >= (opts.bangerMinProfitCents ?? 2000),
   };
 }
 

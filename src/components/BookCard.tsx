@@ -151,6 +151,11 @@ export function BookCard({ detection, photo, photos = [], t, country, lists, pat
                   {t.scan.sortBiblioRank} {m.biblioRank}
                 </span>
               )}
+              {m.banger && (
+                <span title={t.book.bangerHelp} className="rounded-full bg-yellow-400 px-2.5 py-0.5 text-sm font-bold text-yellow-950">
+                  🏅 {t.book.banger}
+                </span>
+              )}
               {detection.inStock && <span className="rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-semibold text-sky-800">📦 {t.book.inStock}</span>}
             </div>
             <h3 className="text-base font-semibold leading-tight">{b.title}</h3>
@@ -166,12 +171,20 @@ export function BookCard({ detection, photo, photos = [], t, country, lists, pat
       </div>
 
       <div className="flex gap-4">
-        {b.coverUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={b.coverUrl} alt={b.title} className="h-48 w-32 shrink-0 rounded-lg object-cover shadow" />
-        ) : (
-          <div className="grid h-48 w-32 shrink-0 place-items-center rounded-lg bg-mint text-4xl">📕</div>
-        )}
+        <div className="relative shrink-0">
+          {b.coverUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={b.coverUrl} alt={b.title} className="h-48 w-32 rounded-lg object-cover shadow" />
+          ) : (
+            <div className="grid h-48 w-32 place-items-center rounded-lg bg-mint text-4xl">📕</div>
+          )}
+          {/* Médaille sur la couverture, comme BiblioScan. */}
+          {m.banger && (
+            <span className="absolute -top-2 -left-2 text-4xl drop-shadow" title={t.book.bangerHelp} aria-label={t.book.banger}>
+              🏅
+            </span>
+          )}
+        </div>
         <div className="min-w-0 flex-1 space-y-2">
           {/* Sans vente connue, la médiane vient des offres en cours : on le dit. */}
           <p className="text-xs font-medium uppercase tracking-wider text-slate-500">

@@ -7,6 +7,7 @@ import type { BadgeStats } from "./badges";
 import type { Prisma } from "@prisma/client";
 import type { NormalizedBox, Point, TextDirection } from "./geometry";
 import { computeMetrics, type BookMetrics } from "./prices/metrics";
+import { env } from "./env";
 
 export interface PriceRow {
   id: string;
@@ -69,7 +70,7 @@ export function toBookView(book: BookWithPrices, country: string): BookView {
     rating: book.rating,
     reviewCount: book.reviewCount,
     stats,
-    metrics: computeMetrics(snaps, stats, book),
+    metrics: computeMetrics(snaps, stats, book, new Date(), { bangerMinProfitCents: env.bangerMinProfitCents() }),
     prices: bestByPlatform(rows),
     hasDemo: snaps.some((s) => s.source === "demo"),
   };

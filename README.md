@@ -53,8 +53,9 @@ Pour tester l'interface sans aucune clé, mets `PRICE_DEMO_MODE=true` : l'appli 
 
 - **Prix médian** : médiane des prix d'occasion et des ventes (ou des prix neufs s'il n'y a rien d'autre).
 - **Fourchette de revente conseillée** : du 1er quartile à la médiane, pour vendre vite sans brader.
-- **Profit net estimé** : prix médian − commission (`RESALE_FEE_RATE`, 15 %) − frais fixes (`RESALE_FIXED_COST_CENTS`, 1,50 €).
-- **Prix d'achat max conseillé** : profit net ÷ (1 + `TARGET_ROI`). Avec `TARGET_ROI=1`, tu doubles ta mise. Si un site de rachat (Momox…) paie plus, c'est ce prix qui sert de plancher.
+- **Profit net estimé** : prix médian − commission (`RESALE_FEE_RATE`, 20 %) − frais fixes (`RESALE_FIXED_COST_CENTS`, 4,10 €, envoi compris). Réglages calés sur BiblioScan.
+- **Pépite 🏅** : profit pondéré sur 30 jours ≥ 20 € (`BANGER_MIN_PROFIT_CENTS`). Un popup présente chaque pépite à la fin du scan.
+- **Prix d'achat max conseillé** : profit net ÷ (1 + `TARGET_ROI`). Avec `TARGET_ROI=2` (défaut), tu triples ta mise. Si un site de rachat (Momox…) paie plus, c'est ce prix qui sert de plancher.
 - **Ventes sur 12 mois / 30 jours** : estimation de Keepa (baisses du classement des ventes Amazon) si `KEEPA_API_KEY` est configurée, sinon le nombre de ventes enregistrées (saisies « Vendu » ou mode démo). Les ventes individuelles avec leur prix ne sont pas disponibles légalement chez Amazon ou eBay sans accès spécial (eBay Marketplace Insights est réservé) : le tableau « Vendu il y a / Au prix de » se remplit avec tes saisies et le mode démo.
 - **Profit pondéré sur 30 jours** : profit net × chance de vendre dans le mois (ventes par mois sur l'année, plafonnées à 1). C'est le tri par défaut, proche du « BiblioRank ».
 - **Ratio** : prix médian ÷ prix éditeur.
@@ -131,7 +132,7 @@ Toutes sont décrites dans [`.env.example`](.env.example).
 | `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET` | non | API eBay Browse |
 | `KEEPA_API_KEY` | non | Prix Amazon via Keepa |
 | `PRICE_DEMO_MODE` | non | Prix factices pour tester |
-| `RESALE_FEE_RATE`, `RESALE_FIXED_COST_CENTS`, `TARGET_ROI` | non | Paramètres de rentabilité |
+| `RESALE_FEE_RATE`, `RESALE_FIXED_COST_CENTS`, `TARGET_ROI`, `BANGER_MIN_PROFIT_CENTS` | non | Paramètres de rentabilité et seuil des pépites |
 | `CRON_SECRET` | en production | Protège la route `/api/cron` |
 
 ## Déployer
