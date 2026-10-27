@@ -9,6 +9,7 @@ import { PLATFORM_BY_ID, PLATFORMS, platformName, siteLinks } from "@/lib/prices
 import { addManualPriceAction, addToListAction, addToStockAction, deletePriceAction, refreshPricesAction, saveNoteAction } from "@/app/actions";
 import { shortAge } from "@/lib/prices/metrics";
 import { SpineImage } from "./SpineImage";
+import { BookCover } from "./BookCover";
 import { BooksIcon, LocationView, LocateIcon, MoreIcon, SalesHistory, Sheet, SiteLogo, SitesSheet, type PhotoInfo } from "./BookPanels";
 
 interface Props {
@@ -172,12 +173,7 @@ export function BookCard({ detection, photo, photos = [], t, country, lists, pat
 
       <div className="flex gap-4">
         <div className="relative shrink-0">
-          {b.coverUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={b.coverUrl} alt={b.title} className="h-48 w-32 rounded-lg object-cover shadow" />
-          ) : (
-            <div className="grid h-48 w-32 place-items-center rounded-lg bg-mint text-4xl">📕</div>
-          )}
+          <BookCover key={b.coverUrl ?? b.isbn13} src={b.coverUrl} isbn13={b.isbn13} alt={b.title} className="h-48 w-32 rounded-lg shadow" />
           {/* Médaille sur la couverture, comme BiblioScan. */}
           {m.banger && (
             <span className="absolute -top-2 -left-2 text-4xl drop-shadow" title={t.book.bangerHelp} aria-label={t.book.banger}>

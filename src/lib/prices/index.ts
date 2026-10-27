@@ -66,6 +66,7 @@ export async function refreshPrices(bookId: string, country: string, opts: { for
                     reviewCount: info.reviewCount,
                     // Le prix éditeur de Google Books reste prioritaire.
                     ...(book.listPriceCents === null && info.listPriceCents !== null && { listPriceCents: info.listPriceCents }),
+                    ...(!book.coverUrl && info.coverUrl && { coverUrl: info.coverUrl }),
                   }),
                 },
               }),

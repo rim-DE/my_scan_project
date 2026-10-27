@@ -29,6 +29,8 @@ export interface BookInfo {
   rating: number | null;
   reviewCount: number | null;
   listPriceCents: number | null;
+  /** Couverture, pour les livres que Google Books / Open Library n'illustrent pas. */
+  coverUrl?: string | null;
 }
 
 export interface ProviderResult {
