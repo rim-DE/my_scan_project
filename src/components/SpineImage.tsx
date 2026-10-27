@@ -52,6 +52,7 @@ export function SpineImage({ src, polygon, bbox, textDirection, height = 44, alt
       canvas.height = Math.max(1, Math.round(frame.thickness * scale));
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
+      ctx.imageSmoothingQuality = "high";
       ctx.setTransform(...spineTransform(frame, scale));
       ctx.drawImage(img, 0, 0);
     });

@@ -23,12 +23,12 @@ describe("indicateurs façon BiblioScan", () => {
     expect(m.lastSales.map((s) => s.priceCents)).toEqual([2500, 2300, 2400, 9900]);
     expect(m.sales).toHaveLength(3);
     expect(m.sales[0].platform).toBe("ebay");
-    // Médiane des ventes de l'année 2400 (les offres en cours ne comptent pas).
-    // 2 ventes ces 3 derniers mois = 0,67 vente par mois (mieux que 3 par an).
-    expect(stats.medianCents).toBe(2400);
-    expect(m.weightedProfit30dCents).toBe(1600);
+    // Médiane des 5 dernières ventes, même anciennes, comme BiblioScan : 2450 (les offres en cours ne comptent pas).
+    // Rythme des 5 dernières ventes, comme BiblioScan : 4 ventes en 500 jours ≈ 0,24 vente par mois.
+    expect(stats.medianCents).toBe(2450);
+    expect(m.weightedProfit30dCents).toBe(Math.round(2450 * (4 / (500 / 30.44))));
     expect(m.banger).toBe(false);
-    expect(m.ratio).toBe(0.8);
+    expect(m.ratio).toBe(0.82);
     expect(m.currentPriceCents).toBe(2600);
     expect(m.currentOfferCount).toBe(2);
   });
@@ -40,6 +40,17 @@ describe("indicateurs façon BiblioScan", () => {
     expect(m.sales12m).toBe(40);
     expect(m.weightedProfit30dCents).toBe(1000);
     expect(m.ratio).toBeNull();
+  });
+
+  it("sans vente cette année, prend le rythme des dernières ventes (comme BiblioScan)", () => {
+    // « La peur exponentielle » : 0 vente sur 12 mois, 5 ventes il y a 22 à 29 mois → environ 0,17 vente par mois.
+    const sold = (days: number): SalePoint & { platform: string } => ({ platform: "amazon", offerType: "SOLD", priceCents: 1191, observedAt: daysAgo(days) });
+    const points = [sold(640), sold(700), sold(770), sold(800), sold(870)];
+    const stats = computeStats(points, SETTINGS, NOW);
+    const m = computeMetrics(points, stats, { listPriceCents: 2100, sales12m: 0, sales30d: 0 }, NOW);
+    const pace = 5 / (870 / 30.44);
+    expect(m.weightedProfit30dCents).toBe(Math.round(stats.netAfterFeesCents! * pace));
+    expect(m.biblioRank).toBeGreaterThan(0);
   });
 
   it("sans information de ventes, pas de profit pondéré", () => {

@@ -4,6 +4,7 @@ import sharp from "sharp";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { env } from "./env";
+import { toModelSize } from "./image";
 import { iou, normalizeQuad, overlapOfSmaller, quadToBox, type NormalizedBox, type Point } from "./geometry";
 
 export type { NormalizedBox } from "./geometry";
@@ -182,19 +183,25 @@ export async function detectBooks(
   const meta = await sharp(jpeg).metadata();
   const size = { width: meta.width ?? 0, height: meta.height ?? 0 };
   if (opts.mode === "single") {
-    const books = await callModel(jpeg, SINGLE_PROMPT(size.width, size.height));
-    return cleanDetections(books, size);
+    // La photo gardée est plus grande que ce que lit le modèle : on la réduit (coordonnées dans l'image réduite).
+    const small = await toModelSize(jpeg, size.width, size.height);
+    const books = await callModel(small.data, SINGLE_PROMPT(small.width, small.height));
+    return cleanDetections(books, small);
   }
   const tiles = tileLayout(size.width, size.height);
   const perTile = await Promise.all(
     tiles.map(async (tile) => {
-      const image =
+      const crop =
         tiles.length === 1
           ? jpeg
           : await sharp(jpeg).extract({ left: tile.left, top: 0, width: tile.width, height: size.height }).jpeg({ quality: 90 }).toBuffer();
-      const books = await callModel(image, SHELF_PROMPT(opts.language, tile.width, size.height));
-      // Coordonnées de la bande -> coordonnées de la photo entière.
-      const shifted = books.map((b) => ({ ...b, corners: b.corners.map((c) => ({ x: c.x + tile.left, y: c.y })) }));
+      // Chaque bande est réduite à la taille maximale lue par le modèle.
+      const image = await toModelSize(crop, tile.width, size.height);
+      const books = await callModel(image.data, SHELF_PROMPT(opts.language, image.width, image.height));
+      // Coordonnées de la bande réduite -> coordonnées de la photo entière.
+      const sx = tile.width / image.width;
+      const sy = size.height / image.height;
+      const shifted = books.map((b) => ({ ...b, corners: b.corners.map((c) => ({ x: c.x * sx + tile.left, y: c.y * sy })) }));
       return cleanDetections(shifted, size);
     }),
   );
