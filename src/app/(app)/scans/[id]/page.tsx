@@ -3,13 +3,13 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { getLocale } from "@/lib/i18n/server";
-import { getDict } from "@/lib/i18n";
+import { fmt, getDict } from "@/lib/i18n";
 import { getScanView } from "@/lib/queries";
-import { retryScanAction } from "@/app/actions";
+import { identifyMissingAction, refreshScanPricesAction, retryScanAction } from "@/app/actions";
 import { StatusBadge } from "@/components/StatusBadge";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { ScanViewer } from "@/components/ScanViewer";
-import { RefreshAllPrices } from "@/components/RefreshAllPrices";
+import { ScanActionButton } from "@/components/ScanActionButton";
 
 // « Actualiser tous les prix » interroge les sources pour chaque livre du scan.
 export const maxDuration = 300;
@@ -26,6 +26,7 @@ export default async function ScanPage({ params }: { params: Promise<{ id: strin
   const { scan, detections } = view;
   const lists = await prisma.shoppingList.findMany({ where: { userId: user.id }, select: { id: true, name: true } });
   const running = scan.status === "PENDING" || scan.status === "PROCESSING";
+  const missing = detections.filter((d) => !d.book && d.rawTitle).length;
 
   return (
     <>
@@ -40,7 +41,20 @@ export default async function ScanPage({ params }: { params: Promise<{ id: strin
           {scan.createdAt.toLocaleString(locale === "en" ? "en-GB" : "fr-FR")} · {scan.photos.length} 🖼 · {detections.length} 📖
         </span>
         {!running && detections.some((d) => d.book) && (
-          <RefreshAllPrices scanId={scan.id} label={t.scan.refreshAllPrices} pendingLabel={t.scan.refreshingAllPrices} />
+          <ScanActionButton
+            action={refreshScanPricesAction}
+            scanId={scan.id}
+            label={`🔄 ${t.scan.refreshAllPrices}`}
+            pendingLabel={`🔄 ${t.scan.refreshingAllPrices}`}
+          />
+        )}
+        {!running && missing > 0 && (
+          <ScanActionButton
+            action={identifyMissingAction}
+            scanId={scan.id}
+            label={`🔎 ${fmt(t.scan.identifyMissing, { n: missing })}`}
+            pendingLabel={`🔎 ${t.scan.identifyingMissing}`}
+          />
         )}
       </div>
 

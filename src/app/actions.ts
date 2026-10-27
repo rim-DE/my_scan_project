@@ -8,7 +8,7 @@ import { prisma } from "@/lib/db";
 import { env } from "@/lib/env";
 import { checkPassword, endSession, hashPassword, requireUser, startSession } from "@/lib/auth";
 import { LOCALE_COOKIE, asLocale, getDict } from "@/lib/i18n";
-import { findOrCreateBookByIsbn } from "@/lib/catalog";
+import { findOrCreateBookByIsbn, findOrCreateBookByTitle } from "@/lib/catalog";
 import { normalizeIsbn } from "@/lib/isbn";
 import { parsePriceToCents } from "@/lib/money";
 import { refreshPrices } from "@/lib/prices";
@@ -114,6 +114,23 @@ export async function refreshScanPricesAction(scanId: string) {
   const bookIds = [...new Set(dets.map((d) => d.bookId!))];
   // Les sources déjà interrogées avec succès il y a moins de 24 h ne sont pas rappelées (pas de jeton Keepa gaspillé).
   await mapLimit(bookIds, 6, (id) => refreshPrices(id, scan.country).catch((e) => console.warn("[prix] scan", id, e)));
+  revalidatePath(`/scans/${scan.id}`);
+}
+
+/** Relance la recherche des livres « non identifiés » d'un scan (titres lus mais catalogue saturé ou injoignable). */
+export async function identifyMissingAction(scanId: string) {
+  const scan = await ownScan(scanId);
+  const dets = await prisma.detection.findMany({ where: { scanId: scan.id, bookId: null, rawTitle: { not: null } } });
+  // 4 à la fois seulement : c'est justement l'excès de recherches simultanées qui fait saturer Google Books.
+  await mapLimit(dets, 4, async (d) => {
+    const book = await findOrCreateBookByTitle({ title: d.rawTitle!, author: d.rawAuthor, language: scan.bookLanguage }).catch((e) => {
+      console.warn("[scan] identification impossible", d.rawTitle, e);
+      return null;
+    });
+    if (!book) return;
+    await prisma.detection.update({ where: { id: d.id }, data: { bookId: book.id } });
+    await refreshPrices(book.id, scan.country).catch((e) => console.warn("[prix] scan", book.id, e));
+  });
   revalidatePath(`/scans/${scan.id}`);
 }
 

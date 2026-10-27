@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { lookupCacheKey, normalizeText, parseGoogleVolume, parseOpenLibraryDoc, scoreCandidate, similarity, MIN_MATCH_SCORE } from "../books";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { CatalogUnavailableError, lookupByTitle, lookupCacheKey, normalizeText, parseGoogleVolume, parseOpenLibraryDoc, scoreCandidate, similarity, MIN_MATCH_SCORE } from "../books";
 
 describe("identification des livres", () => {
   it("normalise le texte (accents, ponctuation)", () => {
@@ -68,5 +68,37 @@ describe("identification des livres", () => {
 
   it("clé de cache stable", () => {
     expect(lookupCacheKey("Rester EN vie", "Matt Haig", "fr")).toBe(lookupCacheKey("rester en vie ", "matt haig", "fr"));
+  });
+});
+
+describe("recherche par titre quand Google Books sature", () => {
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
+  const volume = { volumeInfo: { title: "Sans un mot", authors: ["Harlan Coben"], language: "fr", industryIdentifiers: [{ type: "ISBN_13", identifier: "9782266215893" }] } };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it("réessaie après un 429 au lieu de conclure « non identifié »", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockResolvedValueOnce(json({}, 429)).mockResolvedValueOnce(json({ items: [volume] }));
+    vi.stubGlobal("fetch", fetchMock);
+    const p = lookupByTitle({ title: "Sans un mot", author: "Harlan Coben", language: "fr" });
+    await vi.runAllTimersAsync();
+    expect((await p)?.isbn13).toBe("9782266215893");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("ne renvoie pas « introuvable » (mis en cache) quand Google reste saturé et qu'Open Library ne trouve rien", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: URL) => (String(url).includes("googleapis") ? json({}, 429) : json({ docs: [] }))),
+    );
+    const p = lookupByTitle({ title: "Sans un mot", author: "Harlan Coben", language: "fr" });
+    const check = expect(p).rejects.toBeInstanceOf(CatalogUnavailableError);
+    await vi.runAllTimersAsync();
+    await check;
   });
 });
