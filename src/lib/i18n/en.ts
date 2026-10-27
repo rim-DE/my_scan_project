@@ -111,9 +111,6 @@ export const en: Dict = {
     identifyingMissing: "Searching books… (up to 2 min)",
   },
   book: {
-    linkIsbnHelp: "Got the book at hand? Scan its barcode or type its ISBN to find it.",
-    linkIsbnSave: "Confirm",
-    linkNotFound: "This book can't be found in the catalogues.",
     medianPrice: "Median used price",
     offers: "{n} offer(s)",
     newFrom: "New from",

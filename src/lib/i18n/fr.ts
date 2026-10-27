@@ -110,9 +110,6 @@ export const fr = {
     identifyingMissing: "Recherche des livres… (jusqu'à 2 min)",
   },
   book: {
-    linkIsbnHelp: "Tu as le livre sous la main ? Scanne son code-barres ou tape son ISBN pour le retrouver.",
-    linkIsbnSave: "Valider",
-    linkNotFound: "Ce livre est introuvable dans les catalogues.",
     medianPrice: "Prix médian occasion",
     offers: "{n} offre(s)",
     newFrom: "Neuf dès",
