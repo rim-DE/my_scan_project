@@ -22,7 +22,22 @@ export default async function NewScanPage() {
         <span className="h-px flex-1 bg-slate-200" />
       </div>
       <section className="card">
-        <BarcodeForm t={{ placeholder: t.newScan.isbnPlaceholder, country: t.newScan.country, search: t.newScan.searchIsbn }} />
+        <BarcodeForm
+          t={{
+            placeholder: t.newScan.isbnPlaceholder,
+            country: t.newScan.country,
+            search: t.newScan.searchIsbn,
+            scanBarcode: t.newScan.scanBarcode,
+            coverPhoto: t.newScan.coverPhoto,
+            coverHelp: t.newScan.coverHelp,
+            identifying: t.newScan.identifying,
+            scannerTitle: t.newScan.scannerTitle,
+            scannerHint: t.newScan.scannerHint,
+            scannerNoCamera: t.newScan.scannerNoCamera,
+            scannerNotBook: t.newScan.scannerNotBook,
+            close: t.common.close,
+          }}
+        />
       </section>
     </>
   );

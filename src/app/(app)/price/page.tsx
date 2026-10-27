@@ -73,7 +73,7 @@ export default async function PricePage({ searchParams }: { searchParams: Promis
             </div>
           </section>
           <BookCard
-            detection={{ id: "price", photoId: null, rawTitle: result.title, rawAuthor: null, bbox: null, polygon: null, textDirection: null, confidence: null, note: null, book: result }}
+            detection={{ id: "price", photoId: null, rawTitle: result.title, rawAuthor: null, bbox: null, polygon: null, textDirection: null, confidence: null, note: null, book: result, inStock: false }}
             t={t}
             country={country}
             lists={lists}

@@ -24,7 +24,7 @@ interface Props {
   locale: string;
 }
 
-type Sort = "profit30" | "buyback" | "profit" | "median" | "current" | "sales" | "lastSale" | "position";
+type Sort = "biblioRank" | "outOfStock" | "profit30" | "buyback" | "profit" | "median" | "current" | "sales" | "lastSale" | "position";
 
 /** Valeur de tri d'un livre (plus grand = en premier) ; -1 quand l'information manque. */
 function sortKey(d: DetectionView, sort: Sort): number {
@@ -33,6 +33,10 @@ function sortKey(d: DetectionView, sort: Sort): number {
   const s = b.stats;
   const m = b.metrics;
   switch (sort) {
+    case "biblioRank":
+    case "outOfStock":
+      // À score égal (ou sans score), le gain espéré départage.
+      return m.biblioRank === null ? -1 : m.biblioRank * 1e6 + (m.expected90dCents ?? 0);
     case "profit30":
       return m.weightedProfit30dCents ?? -1;
     case "buyback":
@@ -56,7 +60,7 @@ function sortKey(d: DetectionView, sort: Sort): number {
 function toCsv(rows: DetectionView[]): string {
   const cents = (c: number | null | undefined) => (c === null || c === undefined ? "" : (c / 100).toFixed(2).replace(".", ","));
   const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
-  const header = ["Titre lu", "Titre", "Auteurs", "ISBN13", "Profit net", "Profit pondéré 30j", "Prix médian", "Prix max d'achat", "Ventes 12 mois", "Prix actuel", "Rachat", "Ratio", "Prix éditeur"];
+  const header = ["Titre lu", "Titre", "Auteurs", "ISBN13", "BiblioRank", "Profit net", "Profit pondéré 30j", "Prix médian", "Prix max d'achat", "Ventes 12 mois", "Prix actuel", "Rachat", "Ratio", "Prix éditeur"];
   const lines = rows.map((d) => {
     const b = d.book;
     return [
@@ -64,6 +68,7 @@ function toCsv(rows: DetectionView[]): string {
       esc(b?.title ?? ""),
       esc(b?.authors.join(", ") ?? ""),
       b?.isbn13 ?? "",
+      b?.metrics.biblioRank ?? "",
       cents(b?.stats.netAfterFeesCents),
       cents(b?.metrics.weightedProfit30dCents),
       cents(b?.stats.medianCents),
@@ -80,7 +85,7 @@ function toCsv(rows: DetectionView[]): string {
 
 export function ScanViewer({ photos, detections, t, country, lists, path, locale }: Props) {
   const [q, setQ] = useState("");
-  const [sort, setSort] = useState<Sort>("profit30");
+  const [sort, setSort] = useState<Sort>("biblioRank");
   const [photoIdx, setPhotoIdx] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const photoRef = useRef<HTMLElement>(null);
@@ -89,6 +94,8 @@ export function ScanViewer({ photos, detections, t, country, lists, path, locale
   const shown = useMemo(() => {
     const needle = q.toLowerCase();
     const filtered = detections.filter((d) =>
+      // « Hors stock » : on cache les livres que tu as déjà.
+      !(sort === "outOfStock" && d.inStock) &&
       [d.rawTitle ?? "", d.rawAuthor ?? "", d.book?.title ?? "", d.book?.isbn13 ?? "", ...(d.book?.authors ?? [])].some((v) =>
         v.toLowerCase().includes(needle),
       ),
@@ -122,12 +129,14 @@ export function ScanViewer({ photos, detections, t, country, lists, path, locale
   }
 
   const sorts: [Sort, string][] = [
+    ["biblioRank", t.scan.sortBiblioRank],
     ["profit30", t.scan.sortProfit30],
     ["buyback", t.scan.sortBuyback],
     ["profit", t.scan.sortProfit],
     ["median", t.scan.sortMedian],
     ["current", t.scan.sortCurrent],
     ["sales", t.scan.sortSales],
+    ["outOfStock", t.scan.sortOutOfStock],
     ["lastSale", t.scan.sortLastSale],
     ["position", t.scan.sortPosition],
   ];

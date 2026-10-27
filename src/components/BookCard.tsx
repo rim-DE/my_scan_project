@@ -140,6 +140,19 @@ export function BookCard({ detection, photo, photos = [], t, country, lists, pat
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1 space-y-2">
           <div>
+            <div className="flex flex-wrap items-center gap-2">
+              {m.biblioRank !== null && (
+                <span
+                  title={t.book.biblioRankHelp}
+                  className={`rounded-full px-2.5 py-0.5 text-sm font-bold text-white ${
+                    m.biblioRank >= 60 ? "bg-green-600" : m.biblioRank >= 30 ? "bg-amber-500" : "bg-slate-400"
+                  }`}
+                >
+                  {t.scan.sortBiblioRank} {m.biblioRank}
+                </span>
+              )}
+              {detection.inStock && <span className="rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-semibold text-sky-800">📦 {t.book.inStock}</span>}
+            </div>
             <h3 className="text-base font-semibold leading-tight">{b.title}</h3>
             <p className="text-sm text-slate-600">
               {b.authors.join(", ")}

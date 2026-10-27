@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeMetrics, shortAge, type SalePoint } from "../prices/metrics";
+import { biblioRank, computeMetrics, shortAge, type SalePoint } from "../prices/metrics";
 import { computeStats } from "../prices/stats";
 
 const NOW = new Date("2026-10-25T12:00:00Z");
@@ -64,5 +64,26 @@ describe("nombre d'offres", () => {
     const m = computeMetrics(points, stats, { listPriceCents: 2800, sales12m: 126, sales30d: 10, offerCount: 14 }, NOW);
     expect(m.currentOfferCount).toBe(14);
     expect(m.currentPriceCents).toBe(2500);
+  });
+});
+
+describe("BiblioRank", () => {
+  it("classe d'abord le livre qui rapporte ET se vend vite", () => {
+    // Power : 15 € net, 126 ventes/an, 14 offres → beaucoup mieux qu'un livre à 18 € qui se vend peu face à 16 offres.
+    const power = biblioRank({ netAfterFeesCents: 1500, sales12m: 126, offerCount: 14, buybackCents: null });
+    const slow = biblioRank({ netAfterFeesCents: 1791, sales12m: 25, offerCount: 16, buybackCents: null });
+    expect(power.biblioRank!).toBeGreaterThan(slow.biblioRank!);
+    expect(power.expected90dCents).toBe(1316);
+    expect(power.biblioRank).toBe(73);
+    expect(slow.biblioRank).toBe(42);
+  });
+
+  it("vaut 0 sans vente, sauf si un site de rachat sert de plancher", () => {
+    expect(biblioRank({ netAfterFeesCents: 7388, sales12m: 0, offerCount: 2, buybackCents: null })).toEqual({ expected90dCents: 0, biblioRank: 0 });
+    expect(biblioRank({ netAfterFeesCents: 7388, sales12m: 0, offerCount: 2, buybackCents: 751 }).expected90dCents).toBe(751);
+  });
+
+  it("n'invente pas de score sans nombre de ventes ni rachat", () => {
+    expect(biblioRank({ netAfterFeesCents: 1500, sales12m: null, offerCount: null, buybackCents: null })).toEqual({ expected90dCents: null, biblioRank: null });
   });
 });

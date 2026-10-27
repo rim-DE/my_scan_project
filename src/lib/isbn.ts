@@ -50,3 +50,17 @@ export function normalizeIsbn(input: string): { isbn13: string; isbn10: string |
   }
   return null;
 }
+
+/**
+ * ISBN contenu dans un code lu par la caméra : code-barres EAN-13 d'un livre (978/979…)
+ * ou texte d'un QR code qui contient un ISBN. Renvoie null pour un autre code (prix, magasin…).
+ */
+export function isbnFromCode(text: string): string | null {
+  const direct = normalizeIsbn(text);
+  if (direct && /^97[89]/.test(direct.isbn13)) return direct.isbn13;
+  for (const m of text.matchAll(/97[89][\d-]{10,14}|\b\d{9}[\dXx]\b/g)) {
+    const n = normalizeIsbn(m[0]);
+    if (n) return n.isbn13;
+  }
+  return null;
+}
