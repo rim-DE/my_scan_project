@@ -36,13 +36,15 @@ export interface BookView {
   stats: PriceStats;
   metrics: BookMetrics;
   prices: PriceRow[];
+  /** Les prix Amazon viennent d'une autre édition du même livre (l'ISBN trouvé n'y est pas vendu). */
+  otherEdition: boolean;
   /** Pourquoi il n'y a pas (encore) de prix : voir PriceStatus. */
   priceStatus: PriceStatus;
   hasDemo: boolean;
 }
 
 type BookWithPrices = Prisma.BookGetPayload<{ include: { prices: true } }> & {
-  fetches?: { provider: string; country: string; ok: boolean }[];
+  fetches?: { provider: string; country: string; ok: boolean; fetchedAt: Date }[];
 };
 
 export function toBookView(book: BookWithPrices, country: string): BookView {
@@ -76,6 +78,7 @@ export function toBookView(book: BookWithPrices, country: string): BookView {
     stats,
     metrics: computeMetrics(snaps, stats, book),
     prices: bestByPlatform(rows),
+    otherEdition: Boolean(book.asin && book.isbn13 && book.asin !== book.isbn10),
     priceStatus: priceStatus(
       (book.fetches ?? []).filter((f) => f.country === country),
       snaps.length,

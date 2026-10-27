@@ -183,6 +183,7 @@ export const fr = {
     salesYear: "{n} vente(s) sur 12 mois",
     salesUnknown: "Ventes sur 12 mois : inconnues",
     currentlySold: "Actuellement vendu à {price} · {n} offre(s)",
+    otherEdition: "Prix de l'édition vendue sur Amazon (même titre, même auteur) : cet ISBN-là n'y est pas vendu.",
     seeOnAmazon: "Voir les prix sur Amazon",
     currentlySoldShort: "Vendu actuellement à : {price} · {n} offre(s)",
     seeMomox: "Voir le prix de rachat Momox",

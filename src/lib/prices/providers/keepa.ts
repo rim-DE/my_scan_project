@@ -137,22 +137,29 @@ export const keepaProvider: PriceProvider = {
   enabled: () => Boolean(env.keepaApiKey()),
   async fetch(book, country) {
     const d = DOMAINS[country] ?? DOMAINS.FR;
-    // Livre sans ISBN (édition ancienne) : on cherche sa fiche Amazon par titre, puis on retient l'ASIN.
-    if (!book.isbn13 && !book.asin) return searchByTitle(book, country);
-    const url = new URL("https://api.keepa.com/product");
-    url.searchParams.set("domain", String(d.id));
-    if (book.isbn13) url.searchParams.set("code", book.isbn13);
-    else url.searchParams.set("asin", book.asin!);
-    url.searchParams.set("stats", "90");
-    // Note et nombre d'avis (coûte au plus 1 jeton de plus).
-    url.searchParams.set("rating", "1");
-    const res = await keepaGet(url);
-    const json = (await res.json()) as { products?: KeepaProduct[] };
-    const p = json.products?.[0];
-    if (!p) return { observations: [] };
-    return productResult(p, country);
+    if (book.isbn13) {
+      const byIsbn = await productBy("code", book.isbn13, d.id, country);
+      if (byIsbn.observations.length > 0) return byIsbn;
+    }
+    // Rien sous cet ISBN (livre sans ISBN, édition France Loisirs ou numérique…) : on prend l'édition
+    // Amazon du même titre et du même auteur, trouvée par recherche puis retenue (ASIN) pour les fois suivantes.
+    if (book.asin) return productBy("asin", book.asin, d.id, country);
+    return searchByTitle(book, country);
   },
 };
+
+async function productBy(param: "code" | "asin", value: string, domain: number, country: string): Promise<ProviderResult> {
+  const url = new URL("https://api.keepa.com/product");
+  url.searchParams.set("domain", String(domain));
+  url.searchParams.set(param, value);
+  url.searchParams.set("stats", "90");
+  // Note et nombre d'avis (coûte au plus 1 jeton de plus).
+  url.searchParams.set("rating", "1");
+  const res = await keepaGet(url);
+  const json = (await res.json()) as { products?: KeepaProduct[] };
+  const p = json.products?.[0];
+  return p ? productResult(p, country) : { observations: [] };
+}
 
 function productResult(p: KeepaProduct, country: string): ProviderResult {
   return {
@@ -175,13 +182,16 @@ async function keepaGet(url: URL): Promise<Response> {
   return res;
 }
 
-/** Recherche Amazon par titre et auteur (10 jetons), pour les livres sans ISBN. */
+/** Recherche Amazon par titre et auteur (10 jetons), pour les livres sans ISBN ou dont l'ISBN n'est pas vendu sur Amazon. */
 async function searchByTitle(book: BookRef, country: string): Promise<ProviderResult> {
   const d = DOMAINS[country] ?? DOMAINS.FR;
   const url = new URL("https://api.keepa.com/search");
   url.searchParams.set("domain", String(d.id));
   url.searchParams.set("type", "product");
-  url.searchParams.set("term", [book.title, book.authors[0]].filter(Boolean).join(" "));
+  // « XXIe » s'écrit souvent « 21e » sur Amazon ; le nom de famille de l'auteur suffit.
+  const title = normalizeText(book.title).split(" ").map(romanOrdinal).join(" ");
+  const surname = book.authors[0] ? normalizeText(book.authors[0]).split(" ").at(-1) : "";
+  url.searchParams.set("term", `${title} ${surname}`.trim());
   url.searchParams.set("stats", "90");
   url.searchParams.set("rating", "1");
   const res = await keepaGet(url);
@@ -193,23 +203,31 @@ async function searchByTitle(book: BookRef, country: string): Promise<ProviderRe
 
 /**
  * Choisit la fiche Amazon qui correspond au livre : presque tous les mots du titre doivent y être,
- * et le nom de l'auteur aussi quand on le connaît (sinon on pourrait prendre une réédition d'un autre livre).
+ * et le nom de l'auteur aussi quand on le connaît. Entre plusieurs éditions, on prend la mieux classée
+ * (la plus vendue), comme BiblioScan.
  */
 export function pickKeepaMatch(book: { title: string; authors: string[] }, products: KeepaProduct[]): KeepaProduct | null {
-  const words = (s: string) => normalizeText(s).split(" ").filter((w) => w.length > 2);
+  const words = (s: string) => normalizeText(s).split(" ").map(romanOrdinal).filter((w) => w.length > 2);
   const titleWords = words(book.title);
   if (titleWords.length === 0) return null;
   const surnames = book.authors.map((a) => words(a).at(-1)).filter((w): w is string => Boolean(w));
-  let best: KeepaProduct | null = null;
-  let bestScore = 0;
-  for (const p of products) {
+  const rank = (p: KeepaProduct) => pos(p.stats?.current?.[SALES_RANK]) ?? Infinity;
+  const matches = products.filter((p) => {
     const found = new Set(words(`${p.title ?? ""} ${p.author ?? ""}`));
     const coverage = titleWords.filter((w) => found.has(w)).length / titleWords.length;
     const authorOk = surnames.length === 0 || surnames.some((s) => found.has(s));
-    if (authorOk && coverage >= 0.75 && coverage > bestScore) {
-      best = p;
-      bestScore = coverage;
-    }
-  }
-  return best;
+    return authorOk && coverage >= 0.75;
+  });
+  return matches.sort((a, b) => rank(a) - rank(b))[0] ?? null;
+}
+
+const ROMAN: Record<string, number> = { i: 1, v: 5, x: 10, l: 50, c: 100 };
+
+/** « xxie » → « 21e », pour que « Le Kit du XXIe siècle » corresponde à « Le Kit du 21e siècle ». */
+export function romanOrdinal(w: string): string {
+  const m = /^([ivxlc]{2,})(e|eme)$/.exec(w);
+  if (!m) return w;
+  const digits = [...m[1]].map((c) => ROMAN[c]);
+  const n = digits.reduce((sum, v, i) => sum + (v < (digits[i + 1] ?? 0) ? -v : v), 0);
+  return `${n}e`;
 }
