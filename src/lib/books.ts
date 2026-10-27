@@ -118,7 +118,14 @@ async function googleSearch(q: string, lang?: string): Promise<BookInfo[]> {
   if (lang) url.searchParams.set("langRestrict", lang);
   const key = env.googleBooksApiKey();
   if (key) url.searchParams.set("key", key);
-  const res = await fetch(url, { cache: "no-store" });
+  // Pendant un scan, beaucoup de recherches partent en même temps : Google répond parfois 429 (trop de requêtes).
+  // On réessaie alors 2 fois en patientant un peu, au lieu de conclure « non identifié ».
+  let res = await fetch(url, { cache: "no-store" });
+  for (const wait of [1500, 4000]) {
+    if (res.status !== 429 && res.status < 500) break;
+    await new Promise((r) => setTimeout(r, wait + Math.random() * 1000));
+    res = await fetch(url, { cache: "no-store" });
+  }
   if (!res.ok) throw new Error(`Google Books HTTP ${res.status}`);
   const json = (await res.json()) as { items?: GoogleVolume[] };
   return (json.items ?? []).map(parseGoogleVolume).filter((b): b is BookInfo => b !== null);
@@ -217,27 +224,31 @@ function pickBest(query: { title: string; author?: string | null; language?: str
 
 export async function lookupByTitle(query: { title: string; author?: string | null; language?: string }): Promise<BookInfo | null> {
   const q = `intitle:${query.title}` + (query.author ? ` inauthor:${query.author}` : "");
-  let reachable = false;
+  let googleFailed = false;
   try {
     let found = pickBest(query, await googleSearch(q, query.language));
-    reachable = true;
     if (!found && query.language) found = pickBest(query, await googleSearch(q));
     if (found) return found;
   } catch (e) {
+    googleFailed = true;
     console.warn("[books] Google Books indisponible", e);
   }
   const params: Record<string, string> = { title: query.title };
   if (query.author) params.author = query.author;
+  let found: BookInfo | null = null;
   try {
-    return pickBest(query, await openLibrarySearch(params));
+    found = pickBest(query, await openLibrarySearch(params));
   } catch (e) {
     console.warn("[books] Open Library indisponible", e);
-    if (!reachable) throw new CatalogUnavailableError();
-    return null;
+    if (googleFailed) throw new CatalogUnavailableError();
   }
+  // Google n'a pas répondu et Open Library (moins complet pour les livres français) ne trouve rien :
+  // on ne conclut pas « introuvable », pour ne pas le garder en cache.
+  if (!found && googleFailed) throw new CatalogUnavailableError();
+  return found;
 }
 
 export function lookupCacheKey(title: string, author: string | null | undefined, language: string): string {
-  // "v3" : les recherches faites avant les dernières règles de score ne sont pas réutilisées.
-  return `v3|${language}|${normalizeText(title)}|${normalizeText(author ?? "")}`;
+  // "v4" : on oublie les « introuvables » enregistrés quand Google Books saturait.
+  return `v4|${language}|${normalizeText(title)}|${normalizeText(author ?? "")}`;
 }

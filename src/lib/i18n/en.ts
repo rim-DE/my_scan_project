@@ -107,6 +107,8 @@ export const en: Dict = {
     retry: "Retry",
     refreshAllPrices: "Refresh all prices",
     refreshingAllPrices: "Loading prices… (up to 1 min)",
+    identifyMissing: "Retry unidentified ({n})",
+    identifyingMissing: "Searching books… (up to 2 min)",
   },
   book: {
     medianPrice: "Median used price",

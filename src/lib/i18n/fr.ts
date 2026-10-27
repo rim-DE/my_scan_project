@@ -106,6 +106,8 @@ export const fr = {
     retry: "Relancer",
     refreshAllPrices: "Actualiser tous les prix",
     refreshingAllPrices: "Chargement des prix… (jusqu'à 1 min)",
+    identifyMissing: "Réessayer les non identifiés ({n})",
+    identifyingMissing: "Recherche des livres… (jusqu'à 2 min)",
   },
   book: {
     medianPrice: "Prix médian occasion",
