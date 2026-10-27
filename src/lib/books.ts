@@ -56,13 +56,28 @@ export function titleSimilarity(queryTitle: string, candidateTitle: string, auth
   return similarity(strip(queryTitle), strip(candidateTitle));
 }
 
-export function scoreCandidate(query: { title: string; author?: string | null; language?: string | null }, c: BookInfo): number {
+type TitleQuery = { title: string; author?: string | null; publisher?: string | null; language?: string | null };
+
+/** L'éditeur lu sur la tranche correspond à celui de la fiche (ou apparaît dans son titre : « Le Grand Larousse de… »). */
+function publisherMatches(read: string, c: BookInfo): boolean {
+  const words = [...tokens(read)].filter((w) => w.length > 2 && !["editions", "edition", "ed"].includes(w));
+  const found = tokens(`${c.publisher ?? ""} ${c.title}`);
+  return words.some((w) => found.has(w));
+}
+
+export function scoreCandidate(query: TitleQuery, c: BookInfo): number {
   const authorNames = query.author ? [query.author, ...c.authors] : c.authors;
-  let score = titleSimilarity(query.title, c.title, authorNames);
-  if (query.author && c.authors.length > 0) {
-    const a = Math.max(...c.authors.map((x) => similarity(query.author!, x)));
-    score = score * 0.75 + a * 0.25;
-  }
+  const titleScore = titleSimilarity(query.title, c.title, authorNames);
+  const authorScore = query.author && c.authors.length > 0 ? Math.max(...c.authors.map((x) => similarity(query.author!, x))) : null;
+  const sameEditor = query.publisher ? publisherMatches(query.publisher, c) : false;
+  // Un seul mot lu (« Grossesse ») se retrouve dans des dizaines de titres : il faut le titre exact,
+  // ou bien l'auteur ou l'éditeur lus sur la tranche pour confirmer.
+  const names = new Set(authorNames.flatMap((n) => [...tokens(n)]));
+  const readWords = [...tokens(query.title)].filter((w) => !names.has(w));
+  if (readWords.length === 1 && titleScore < 1 && !sameEditor && !(authorScore !== null && authorScore >= 0.5)) return 0;
+  let score = titleScore;
+  if (authorScore !== null) score = score * 0.75 + authorScore * 0.25;
+  if (sameEditor) score += 0.1;
   if (c.isbn13) score += 0.02; // léger bonus si on a un ISBN exploitable
   if (query.language && c.language && c.language !== query.language) score -= OTHER_LANGUAGE_PENALTY;
   return score;
@@ -277,7 +292,7 @@ export class CatalogUnavailableError extends Error {
   }
 }
 
-function pickBest(query: { title: string; author?: string | null; language?: string }, candidates: BookInfo[]): BookInfo | null {
+function pickBest(query: TitleQuery, candidates: BookInfo[]): BookInfo | null {
   let best: BookInfo | null = null;
   let bestScore = 0;
   for (const c of candidates) {
@@ -290,11 +305,16 @@ function pickBest(query: { title: string; author?: string | null; language?: str
   return bestScore >= MIN_MATCH_SCORE ? best : null;
 }
 
-export async function lookupByTitle(query: { title: string; author?: string | null; language?: string }): Promise<BookInfo | null> {
+export async function lookupByTitle(query: TitleQuery & { language?: string }): Promise<BookInfo | null> {
   // Les parenthèses et guillemets du titre lu (« Survivre sans écrans (quand on est ado) ») gênent les moteurs de recherche.
   const clean = (s: string) => s.replace(/[()[\]"«»]/g, " ").replace(/\s+/g, " ").trim();
   query = { ...query, title: clean(query.title) };
-  const q = `intitle:${query.title}` + (query.author ? ` inauthor:${query.author}` : "");
+  // Un titre d'un seul mot ne suffit pas à Google : on précise l'éditeur lu sur la tranche.
+  const oneWord = oneWordTitle(query);
+  const q =
+    `intitle:${query.title}` +
+    (query.author ? ` inauthor:${query.author}` : "") +
+    (oneWord && query.publisher ? ` inpublisher:${clean(query.publisher)}` : "");
   let googleFailed = false;
   try {
     let found = pickBest(query, await googleSearch(q, query.language));
@@ -335,12 +355,12 @@ export async function lookupByTitle(query: { title: string; author?: string | nu
  * Dernier recours : la fiche Amazon (via Keepa, 10 jetons), comme BiblioScan.
  * Seulement si le titre a été lu (pas « Auteur (titre illisible) »).
  */
-async function amazonSearch(query: { title: string; author?: string | null; language?: string }): Promise<BookInfo | null> {
+async function amazonSearch(query: TitleQuery): Promise<BookInfo | null> {
   if (!env.keepaApiKey() || /illisible/i.test(query.title)) return null;
   if (titleSimilarity(query.title, query.title, query.author ? [query.author] : []) === 0) return null;
   try {
     const { keepaSearch, keepaBookInfo } = await import("./prices/providers/keepa");
-    const candidates = (await keepaSearch(query.title, query.author)).flatMap((p) => {
+    const candidates = (await keepaSearch(oneWordTitle(query) && query.publisher ? `${query.title} ${query.publisher}` : query.title, query.author)).flatMap((p) => {
       const info = keepaBookInfo(p);
       if (!info) return [];
       const norm = info.isbn13 ? normalizeIsbn(info.isbn13) : null;
@@ -364,7 +384,11 @@ async function amazonSearch(query: { title: string; author?: string | null; lang
   }
 }
 
-export function lookupCacheKey(title: string, author: string | null | undefined, language: string): string {
-  // "v6" : on oublie les « introuvables » enregistrés avant la recherche sur Amazon.
-  return `v6|${language}|${normalizeText(title)}|${normalizeText(author ?? "")}`;
+function oneWordTitle(query: TitleQuery): boolean {
+  return [...tokens(query.title)].length === 1;
+}
+
+export function lookupCacheKey(title: string, author: string | null | undefined, language: string, publisher?: string | null): string {
+  // "v7" : on oublie les correspondances trouvées avec un seul mot du titre (« Grossesse » → « Ostéopathie & grossesse »).
+  return `v7|${language}|${normalizeText(title)}|${normalizeText(author ?? "")}|${normalizeText(publisher ?? "")}`;
 }

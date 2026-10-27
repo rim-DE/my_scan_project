@@ -26,7 +26,7 @@ export async function POST(req: Request) {
     if (!found) return NextResponse.json({ error: "Aucun livre reconnu." }, { status: 404 });
     const book =
       (found.isbn ? await findOrCreateBookByIsbn(found.isbn) : null) ??
-      (await findOrCreateBookByTitle({ title: found.title, author: found.author, language: user.locale }));
+      (await findOrCreateBookByTitle({ title: found.title, author: found.author, publisher: found.publisher, language: user.locale }));
     if (!book) return NextResponse.json({ error: `Livre lu (« ${found.title} ») mais introuvable dans les catalogues.` }, { status: 404 });
     return NextResponse.json({ bookId: book.id });
   } catch (e) {
