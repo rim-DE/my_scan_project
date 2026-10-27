@@ -130,9 +130,21 @@ export async function barcodeScanAction(_: FormState, fd: FormData): Promise<For
     return { error: e instanceof Error ? e.message : String(e) };
   }
   if (!book) return { error: d.price.notFound };
+  await startSingleBookScan(user.id, book, country);
+}
+
+/** Scan d'un seul livre déjà identifié (par la photo de sa couverture, via /api/identify). */
+export async function bookScanAction(bookId: string, country: string) {
+  const user = await requireUser();
+  const book = await prisma.book.findUnique({ where: { id: bookId } });
+  if (!book) return;
+  await startSingleBookScan(user.id, book, country || "FR");
+}
+
+async function startSingleBookScan(userId: string, book: { id: string; title: string; language: string | null }, country: string) {
   const scan = await prisma.scan.create({
     data: {
-      userId: user.id,
+      userId,
       name: book.title,
       kind: "BARCODE",
       country,

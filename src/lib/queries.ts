@@ -86,6 +86,8 @@ export interface DetectionView {
   confidence: string | null;
   note: string | null;
   book: BookView | null;
+  /** Le livre est déjà dans ton stock (non vendu). */
+  inStock: boolean;
 }
 
 export async function getScanView(scanId: string, userId: string) {
@@ -97,6 +99,12 @@ export async function getScanView(scanId: string, userId: string) {
     },
   });
   if (!scan) return null;
+  const bookIds = [...new Set(scan.detections.flatMap((d) => (d.bookId ? [d.bookId] : [])))];
+  const stocked = await prisma.stockItem.findMany({
+    where: { userId, bookId: { in: bookIds }, status: { not: "SOLD" } },
+    select: { bookId: true },
+  });
+  const inStock = new Set(stocked.map((s) => s.bookId));
   const detections: DetectionView[] = scan.detections.map((d) => ({
     id: d.id,
     photoId: d.photoId,
@@ -108,6 +116,7 @@ export async function getScanView(scanId: string, userId: string) {
     confidence: d.confidence,
     note: d.note,
     book: d.book ? toBookView(d.book, scan.country) : null,
+    inStock: d.bookId ? inStock.has(d.bookId) : false,
   }));
   return { scan, detections };
 }

@@ -30,6 +30,37 @@ export interface BookMetrics {
   /** Offre la moins chère en ce moment (neuf ou occasion) et nombre d'offres. */
   currentPriceCents: number | null;
   currentOfferCount: number;
+  /** Gain espéré sur 3 mois : profit net × chance de vendre ton exemplaire (au moins le prix de rachat). */
+  expected90dCents: number | null;
+  /** Score de 0 à 100 qui classe les livres à acheter en premier (voir biblioRank). */
+  biblioRank: number | null;
+}
+
+/** Échelle du score : un gain espéré de 10 € donne environ 63/100, 20 € environ 86/100. */
+const RANK_SCALE_CENTS = 1000;
+
+/**
+ * « BiblioRank » maison : combien tu gagnes × à quelle vitesse ton exemplaire part.
+ * - ventes par mois partagées entre les vendeurs en place (+ toi) : plus il y a d'offres, plus c'est lent ;
+ * - chance de vendre en 3 mois = 1 − e^(−3 × ventes mensuelles pour ton exemplaire) ;
+ * - un prix de rachat (Momox…) est un gain sûr : il sert de plancher.
+ * Sans nombre de ventes connu (pas de Keepa) ni rachat, pas de score.
+ */
+export function biblioRank(input: {
+  netAfterFeesCents: number | null;
+  sales12m: number | null;
+  offerCount: number | null;
+  buybackCents: number | null;
+}): { expected90dCents: number | null; biblioRank: number | null } {
+  const { netAfterFeesCents: net, sales12m, offerCount, buybackCents } = input;
+  let expected: number | null = null;
+  if (net !== null && sales12m !== null) {
+    const myMonthlySales = sales12m / 12 / ((offerCount ?? 0) + 1);
+    expected = Math.round(net * (1 - Math.exp(-3 * myMonthlySales)));
+  }
+  if (buybackCents !== null) expected = Math.max(expected ?? 0, buybackCents);
+  if (expected === null) return { expected90dCents: null, biblioRank: null };
+  return { expected90dCents: expected, biblioRank: Math.round(100 * (1 - Math.exp(-expected / RANK_SCALE_CENTS))) };
 }
 
 const DAY = 24 * 3600 * 1000;
@@ -60,6 +91,14 @@ export function computeMetrics(
   const ratio =
     stats.medianCents !== null && book.listPriceCents ? Math.round((stats.medianCents / book.listPriceCents) * 100) / 100 : null;
 
+  const currentOfferCount = book.offerCount ?? offers.length;
+  const rank = biblioRank({
+    netAfterFeesCents: stats.netAfterFeesCents,
+    sales12m,
+    offerCount: currentOfferCount,
+    buybackCents: stats.buybackMaxCents,
+  });
+
   const rows = sold.map((p) => ({ priceCents: p.priceCents, soldAt: p.soldAt.toISOString(), platform: p.platform }));
   return {
     sales12m,
@@ -70,7 +109,8 @@ export function computeMetrics(
     ratio,
     currentPriceCents: offers.length ? Math.min(...offers.map((p) => p.priceCents)) : null,
     // Le nombre réel d'offres (Keepa) quand on le connaît, sinon les offres relevées.
-    currentOfferCount: book.offerCount ?? offers.length,
+    currentOfferCount,
+    ...rank,
   };
 }
 
