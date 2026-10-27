@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { biblioRank, computeMetrics, shortAge, type SalePoint } from "../prices/metrics";
+import { biblioRank, computeMetrics, isInteresting, shortAge, type SalePoint } from "../prices/metrics";
 import { computeStats } from "../prices/stats";
 
 const NOW = new Date("2026-10-25T12:00:00Z");
@@ -90,37 +90,28 @@ describe("BiblioRank", () => {
   });
 });
 
-describe("pépites", () => {
-  const sale = (days: number, priceCents: number): SalePoint & { platform: string } => ({ platform: "amazon", offerType: "SOLD", priceCents, observedAt: daysAgo(days) });
+describe("pépites (livres « intéressants » selon BiblioScan)", () => {
+  const base = { medianCents: 4000, sales12m: 5, ratio: 1.5, currentPriceCents: null };
 
-  it("repère un livre qui rapporte au moins 20 € pondérés sur 30 jours", () => {
-    // Comme l'exemple BiblioScan : ~25 € net et des ventes chaque mois → pépite.
-    const points = [sale(5, 3500), sale(20, 3600), sale(40, 3400), sale(70, 3500)];
+  it("retient un livre à 40 €, 5 ventes, ratio 1,5 et aucune offre en cours", () => {
+    expect(isInteresting(base)).toBe(true);
+    expect(isInteresting({ ...base, currentPriceCents: 3000 })).toBe(true);
+  });
+
+  it("écarte un livre si un seul critère manque", () => {
+    expect(isInteresting({ ...base, medianCents: 3400 })).toBe(false);
+    expect(isInteresting({ ...base, sales12m: 2 })).toBe(false);
+    expect(isInteresting({ ...base, ratio: 1.1 })).toBe(false);
+    expect(isInteresting({ ...base, ratio: null })).toBe(false);
+    expect(isInteresting({ ...base, currentPriceCents: 2500 })).toBe(false);
+  });
+
+  it("calcule la pépite dans les indicateurs du livre", () => {
+    const sale = (days: number, priceCents: number): SalePoint & { platform: string } => ({ platform: "amazon", offerType: "SOLD", priceCents, observedAt: daysAgo(days) });
+    const points = [sale(5, 4000), sale(60, 4200), sale(200, 3800)];
     const stats = computeStats(points, SETTINGS, NOW);
-    const m = computeMetrics(points, { ...stats, netAfterFeesCents: 2500 }, { listPriceCents: null, sales12m: null, sales30d: null }, NOW);
-    expect(m.weightedProfit30dCents).toBe(2500);
+    const m = computeMetrics(points, stats, { listPriceCents: 2500, sales12m: 3, sales30d: 1 }, NOW);
     expect(m.banger).toBe(true);
-  });
-
-  it("compte les ventes récentes quand le livre s'est mis à mieux se vendre", () => {
-    // 6 ventes sur l'année mais toutes dans les 3 derniers mois → 2 ventes/mois, pas 0,5.
-    const points = [10, 20, 30, 50, 60, 80].map((d) => sale(d, 5000));
-    const stats = computeStats(points, SETTINGS, NOW);
-    const m = computeMetrics(points, { ...stats, netAfterFeesCents: 3000 }, { listPriceCents: null, sales12m: 6, sales30d: 3 }, NOW);
-    expect(m.weightedProfit30dCents).toBe(3000);
-    expect(m.banger).toBe(true);
-  });
-
-  it("écarte un livre qui se vend bien mais rapporte trop peu (Power, 15 €)", () => {
-    const m = computeMetrics([], { ...computeStats([], SETTINGS, NOW), netAfterFeesCents: 1500 }, { listPriceCents: null, sales12m: 126, sales30d: 10 }, NOW);
-    expect(m.weightedProfit30dCents).toBe(1500);
-    expect(m.banger).toBe(false);
-  });
-
-  it("respecte un seuil personnalisé", () => {
-    const m = computeMetrics([], { ...computeStats([], SETTINGS, NOW), netAfterFeesCents: 1500 }, { listPriceCents: null, sales12m: 126, sales30d: 10 }, NOW, {
-      bangerMinProfitCents: 1000,
-    });
-    expect(m.banger).toBe(true);
+    expect(computeMetrics(points, stats, { listPriceCents: 3800, sales12m: 3, sales30d: 1 }, NOW).banger).toBe(false);
   });
 });

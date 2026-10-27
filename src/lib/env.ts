@@ -63,8 +63,6 @@ export const env = {
   resaleFeeRate: () => num("RESALE_FEE_RATE", 0.2),
   resaleFixedCostCents: () => num("RESALE_FIXED_COST_CENTS", 410),
   targetRoi: () => num("TARGET_ROI", 2),
-  /** Profit pondéré sur 30 jours à partir duquel un livre est une « pépite ». */
-  bangerMinProfitCents: () => num("BANGER_MIN_PROFIT_CENTS", 2000),
 
   cronSecret: () => process.env.CRON_SECRET,
 };
