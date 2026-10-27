@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/session";
 
 // Toutes les pages demandent d'être connecté, sauf la connexion, l'inscription et la route cron.
-const PUBLIC = ["/login", "/register", "/api/cron"];
+const PUBLIC = ["/login", "/register", "/api/cron", "/manifest.webmanifest"];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
