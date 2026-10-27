@@ -10,6 +10,7 @@ import { addManualPriceAction, addToListAction, addToStockAction, deletePriceAct
 import { shortAge } from "@/lib/prices/metrics";
 import { SpineImage } from "./SpineImage";
 import { BookCover } from "./BookCover";
+import { IsbnLinker } from "./IsbnLinker";
 import { BooksIcon, LocationView, LocateIcon, MoreIcon, SalesHistory, Sheet, SiteLogo, SitesSheet, type PhotoInfo } from "./BookPanels";
 
 interface Props {
@@ -89,6 +90,7 @@ export function BookCard({ detection, photo, photos = [], t, country, lists, pat
         <p className="text-xs font-semibold uppercase text-red-600">{t.scan.unidentified}</p>
         <p className="font-medium">{detection.rawTitle}</p>
         {detection.rawAuthor && <p className="text-sm text-slate-500">{detection.rawAuthor}</p>}
+        {canNote && <IsbnLinker detectionId={detection.id} t={t} />}
         {locateSheet}
       </article>
     );

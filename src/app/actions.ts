@@ -183,6 +183,22 @@ export async function saveNoteAction(detectionId: string, note: string) {
   revalidatePath(`/scans/${det.scanId}`);
 }
 
+/** Rattache un livre « non identifié » grâce à son ISBN (code-barres scanné ou tapé). */
+export async function linkDetectionIsbnAction(detectionId: string, rawIsbn: string): Promise<{ error?: string }> {
+  const user = await requireUser();
+  const d = await t();
+  const det = await prisma.detection.findFirst({ where: { id: detectionId, scan: { userId: user.id } }, include: { scan: true } });
+  if (!det) return { error: d.book.linkNotFound };
+  const norm = normalizeIsbn(rawIsbn);
+  if (!norm) return { error: d.newScan.invalidIsbn };
+  const book = await findOrCreateBookByIsbn(norm.isbn13).catch(() => null);
+  if (!book) return { error: d.book.linkNotFound };
+  await prisma.detection.update({ where: { id: det.id }, data: { bookId: book.id } });
+  await refreshPrices(book.id, det.scan.country).catch((e) => console.warn("[prix] isbn", book.id, e));
+  revalidatePath(`/scans/${det.scanId}`);
+  return {};
+}
+
 export async function addManualPriceAction(fd: FormData) {
   await requireUser();
   const bookId = str(fd, "bookId");
