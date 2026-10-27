@@ -76,7 +76,10 @@ export function computeMetrics(
 
 /** "il y a 3 j", "2 m", "1 a 4 m" : âge court d'une vente, comme dans BiblioScan. */
 export function shortAge(date: Date | string, now = new Date(), locale = "fr"): string {
-  const days = Math.max(0, Math.floor((now.getTime() - new Date(date).getTime()) / DAY));
+  const ms = Math.max(0, now.getTime() - new Date(date).getTime());
+  const days = Math.floor(ms / DAY);
+  // Moins d'un jour : en heures, comme « il y a 2h » dans BiblioScan.
+  if (days === 0) return `${Math.floor(ms / 3600000)}h`;
   const [d, m, y] = locale === "en" ? ["d", "mo", "y"] : ["j", "m", "a"];
   if (days < 30) return `${days}${d}`;
   const months = Math.floor(days / 30.44);

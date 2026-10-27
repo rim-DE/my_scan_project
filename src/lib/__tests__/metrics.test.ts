@@ -49,6 +49,7 @@ describe("indicateurs façon BiblioScan", () => {
 
   it("affiche l'âge d'une vente en format court", () => {
     expect(shortAge(daysAgo(3), NOW)).toBe("3j");
+    expect(shortAge(new Date(NOW.getTime() - 2.5 * 3600 * 1000), NOW)).toBe("2h");
     expect(shortAge(daysAgo(65), NOW)).toBe("2m");
     expect(shortAge(daysAgo(400), NOW)).toBe("1a 1m");
     expect(shortAge(daysAgo(65), NOW, "en")).toBe("2mo");

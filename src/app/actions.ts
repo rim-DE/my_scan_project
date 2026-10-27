@@ -14,6 +14,7 @@ import { parsePriceToCents } from "@/lib/money";
 import { refreshPrices } from "@/lib/prices";
 import { processScan } from "@/lib/scan-processor";
 import { getStorage } from "@/lib/storage";
+import { mapLimit } from "@/lib/concurrency";
 import type { BookCondition, OfferType, StockStatus } from "@prisma/client";
 
 export type FormState = { error?: string; ok?: string } | undefined;
@@ -103,6 +104,16 @@ export async function retryScanAction(scanId: string) {
   const scan = await ownScan(scanId);
   await prisma.scan.update({ where: { id: scan.id }, data: { status: "PENDING", error: null } });
   after(() => processScan(scan.id));
+  revalidatePath(`/scans/${scan.id}`);
+}
+
+/** Charge les prix de tous les livres d'un scan (utile pour un scan fait avant d'ajouter une source de prix). */
+export async function refreshScanPricesAction(scanId: string) {
+  const scan = await ownScan(scanId);
+  const dets = await prisma.detection.findMany({ where: { scanId: scan.id, bookId: { not: null } }, select: { bookId: true } });
+  const bookIds = [...new Set(dets.map((d) => d.bookId!))];
+  // Les sources déjà interrogées avec succès il y a moins de 24 h ne sont pas rappelées (pas de jeton Keepa gaspillé).
+  await mapLimit(bookIds, 6, (id) => refreshPrices(id, scan.country).catch((e) => console.warn("[prix] scan", id, e)));
   revalidatePath(`/scans/${scan.id}`);
 }
 
