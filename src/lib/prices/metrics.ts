@@ -34,6 +34,8 @@ export interface BookMetrics {
   expected90dCents: number | null;
   /** Score de 0 à 100 qui classe les livres à acheter en premier (voir biblioRank). */
   biblioRank: number | null;
+  /** « Pépite » : profit pondéré sur 30 jours au-dessus du seuil (20 € par défaut). */
+  banger: boolean;
 }
 
 /** Échelle du score : un gain espéré de 10 € donne environ 63/100, 20 € environ 86/100. */
@@ -70,6 +72,7 @@ export function computeMetrics(
   stats: PriceStats,
   book: { listPriceCents: number | null; sales12m: number | null; sales30d: number | null; offerCount?: number | null },
   now = new Date(),
+  opts: { bangerMinProfitCents?: number } = {},
 ): BookMetrics {
   const sold = points
     .filter((p) => p.offerType === "SOLD")
@@ -77,13 +80,15 @@ export function computeMetrics(
     .filter((p) => now.getTime() - p.soldAt.getTime() <= 365 * DAY)
     .sort((a, b) => b.soldAt.getTime() - a.soldAt.getTime());
   const recorded30d = sold.filter((p) => now.getTime() - p.soldAt.getTime() <= 30 * DAY).length;
+  const recorded90d = sold.filter((p) => now.getTime() - p.soldAt.getTime() <= 90 * DAY).length;
 
   // Une source de ventes (Keepa) l'emporte sur nos propres relevés, forcément incomplets.
   const sales12m = book.sales12m ?? (sold.length > 0 ? sold.length : null);
   const sales30d = book.sales30d ?? (sold.length > 0 ? recorded30d : null);
 
-  // Probabilité de vendre dans le mois : ventes mensuelles moyennes, plafonnées à 1.
-  const perMonth = sales12m !== null ? sales12m / 12 : null;
+  // Probabilité de vendre dans le mois : ventes mensuelles (moyenne sur 12 mois, ou sur les
+  // 3 derniers mois si le livre s'est mis à mieux se vendre), plafonnées à 1.
+  const perMonth = sales12m !== null ? Math.max(sales12m / 12, recorded90d / 3) : null;
   const weightedProfit30dCents =
     stats.netAfterFeesCents !== null && perMonth !== null ? Math.round(stats.netAfterFeesCents * Math.min(1, perMonth)) : null;
 
@@ -111,6 +116,7 @@ export function computeMetrics(
     // Le nombre réel d'offres (Keepa) quand on le connaît, sinon les offres relevées.
     currentOfferCount,
     ...rank,
+    banger: weightedProfit30dCents !== null && weightedProfit30dCents >= (opts.bangerMinProfitCents ?? 2000),
   };
 }
 

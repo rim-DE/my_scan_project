@@ -23,9 +23,11 @@ describe("indicateurs façon BiblioScan", () => {
     expect(m.lastSales.map((s) => s.priceCents)).toEqual([2500, 2300, 2400]);
     expect(m.sales).toHaveLength(3);
     expect(m.sales[0].platform).toBe("ebay");
-    // Médiane des ventes de l'année 2400 (les offres en cours ne comptent pas), 3 ventes par an = 0,25 vente par mois.
+    // Médiane des ventes de l'année 2400 (les offres en cours ne comptent pas).
+    // 2 ventes ces 3 derniers mois = 0,67 vente par mois (mieux que 3 par an).
     expect(stats.medianCents).toBe(2400);
-    expect(m.weightedProfit30dCents).toBe(600);
+    expect(m.weightedProfit30dCents).toBe(1600);
+    expect(m.banger).toBe(false);
     expect(m.ratio).toBe(0.8);
     expect(m.currentPriceCents).toBe(2600);
     expect(m.currentOfferCount).toBe(2);
@@ -85,5 +87,40 @@ describe("BiblioRank", () => {
 
   it("n'invente pas de score sans nombre de ventes ni rachat", () => {
     expect(biblioRank({ netAfterFeesCents: 1500, sales12m: null, offerCount: null, buybackCents: null })).toEqual({ expected90dCents: null, biblioRank: null });
+  });
+});
+
+describe("pépites", () => {
+  const sale = (days: number, priceCents: number): SalePoint & { platform: string } => ({ platform: "amazon", offerType: "SOLD", priceCents, observedAt: daysAgo(days) });
+
+  it("repère un livre qui rapporte au moins 20 € pondérés sur 30 jours", () => {
+    // Comme l'exemple BiblioScan : ~25 € net et des ventes chaque mois → pépite.
+    const points = [sale(5, 3500), sale(20, 3600), sale(40, 3400), sale(70, 3500)];
+    const stats = computeStats(points, SETTINGS, NOW);
+    const m = computeMetrics(points, { ...stats, netAfterFeesCents: 2500 }, { listPriceCents: null, sales12m: null, sales30d: null }, NOW);
+    expect(m.weightedProfit30dCents).toBe(2500);
+    expect(m.banger).toBe(true);
+  });
+
+  it("compte les ventes récentes quand le livre s'est mis à mieux se vendre", () => {
+    // 6 ventes sur l'année mais toutes dans les 3 derniers mois → 2 ventes/mois, pas 0,5.
+    const points = [10, 20, 30, 50, 60, 80].map((d) => sale(d, 5000));
+    const stats = computeStats(points, SETTINGS, NOW);
+    const m = computeMetrics(points, { ...stats, netAfterFeesCents: 3000 }, { listPriceCents: null, sales12m: 6, sales30d: 3 }, NOW);
+    expect(m.weightedProfit30dCents).toBe(3000);
+    expect(m.banger).toBe(true);
+  });
+
+  it("écarte un livre qui se vend bien mais rapporte trop peu (Power, 15 €)", () => {
+    const m = computeMetrics([], { ...computeStats([], SETTINGS, NOW), netAfterFeesCents: 1500 }, { listPriceCents: null, sales12m: 126, sales30d: 10 }, NOW);
+    expect(m.weightedProfit30dCents).toBe(1500);
+    expect(m.banger).toBe(false);
+  });
+
+  it("respecte un seuil personnalisé", () => {
+    const m = computeMetrics([], { ...computeStats([], SETTINGS, NOW), netAfterFeesCents: 1500 }, { listPriceCents: null, sales12m: 126, sales30d: 10 }, NOW, {
+      bangerMinProfitCents: 1000,
+    });
+    expect(m.banger).toBe(true);
   });
 });

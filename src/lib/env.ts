@@ -59,9 +59,12 @@ export const env = {
   ebayClientSecret: () => process.env.EBAY_CLIENT_SECRET,
   keepaApiKey: () => process.env.KEEPA_API_KEY,
 
-  resaleFeeRate: () => num("RESALE_FEE_RATE", 0.15),
-  resaleFixedCostCents: () => num("RESALE_FIXED_COST_CENTS", 150),
-  targetRoi: () => num("TARGET_ROI", 1),
+  // Calés sur BiblioScan : commission Amazon 15 % + 1,01 € TVA comprise, plus ~3 € d'envoi.
+  resaleFeeRate: () => num("RESALE_FEE_RATE", 0.2),
+  resaleFixedCostCents: () => num("RESALE_FIXED_COST_CENTS", 410),
+  targetRoi: () => num("TARGET_ROI", 2),
+  /** Profit pondéré sur 30 jours à partir duquel un livre est une « pépite ». */
+  bangerMinProfitCents: () => num("BANGER_MIN_PROFIT_CENTS", 2000),
 
   cronSecret: () => process.env.CRON_SECRET,
 };

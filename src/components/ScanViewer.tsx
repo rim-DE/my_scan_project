@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dict } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n";
 import type { DetectionView } from "@/lib/queries";
 import { boxToQuad } from "@/lib/geometry";
 import { BookCard } from "./BookCard";
+import { BangerPopup } from "./BangerPopup";
 
 interface PhotoInfo {
   id: string;
@@ -22,9 +23,12 @@ interface Props {
   lists: { id: string; name: string }[];
   path: string;
   locale: string;
+  /** Pour ne montrer le popup des pépites qu'une fois par scan, et seulement une fois le scan fini. */
+  scanId?: string;
+  running?: boolean;
 }
 
-type Sort = "biblioRank" | "outOfStock" | "profit30" | "buyback" | "profit" | "median" | "current" | "sales" | "lastSale" | "position";
+type Sort = "biblioRank" | "bangers" | "outOfStock" | "profit30" | "buyback" | "profit" | "median" | "current" | "sales" | "lastSale" | "position";
 
 /** Valeur de tri d'un livre (plus grand = en premier) ; -1 quand l'information manque. */
 function sortKey(d: DetectionView, sort: Sort): number {
@@ -37,6 +41,7 @@ function sortKey(d: DetectionView, sort: Sort): number {
     case "outOfStock":
       // À score égal (ou sans score), le gain espéré départage.
       return m.biblioRank === null ? -1 : m.biblioRank * 1e6 + (m.expected90dCents ?? 0);
+    case "bangers":
     case "profit30":
       return m.weightedProfit30dCents ?? -1;
     case "buyback":
@@ -83,19 +88,38 @@ function toCsv(rows: DetectionView[]): string {
   return "﻿" + [header.join(";"), ...lines].join("\n");
 }
 
-export function ScanViewer({ photos, detections, t, country, lists, path, locale }: Props) {
+export function ScanViewer({ photos, detections, t, country, lists, path, locale, scanId, running = false }: Props) {
   const [q, setQ] = useState("");
   const [sort, setSort] = useState<Sort>("biblioRank");
   const [photoIdx, setPhotoIdx] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const photoRef = useRef<HTMLElement>(null);
   const photo = photos[photoIdx];
+  const bangers = useMemo(
+    () => detections.filter((d) => d.book?.metrics.banger).sort((a, b) => sortKey(b, "profit30") - sortKey(a, "profit30")),
+    [detections],
+  );
+  const [showBangers, setShowBangers] = useState(false);
+
+  // À la fin du scan, on présente les pépites une seule fois (mémorisé dans le navigateur).
+  useEffect(() => {
+    if (running || !scanId || bangers.length === 0) return;
+    const key = `bangers-seen:${scanId}`;
+    try {
+      if (localStorage.getItem(key)) return;
+      localStorage.setItem(key, "1");
+    } catch {
+      // Stockage indisponible (navigation privée) : on montre quand même le popup.
+    }
+    setShowBangers(true);
+  }, [running, scanId, bangers.length]);
 
   const shown = useMemo(() => {
     const needle = q.toLowerCase();
     const filtered = detections.filter((d) =>
-      // « Hors stock » : on cache les livres que tu as déjà.
+      // « Hors stock » : on cache les livres que tu as déjà ; « Pépites » : on ne garde qu'elles.
       !(sort === "outOfStock" && d.inStock) &&
+      !(sort === "bangers" && !d.book?.metrics.banger) &&
       [d.rawTitle ?? "", d.rawAuthor ?? "", d.book?.title ?? "", d.book?.isbn13 ?? "", ...(d.book?.authors ?? [])].some((v) =>
         v.toLowerCase().includes(needle),
       ),
@@ -130,6 +154,7 @@ export function ScanViewer({ photos, detections, t, country, lists, path, locale
 
   const sorts: [Sort, string][] = [
     ["biblioRank", t.scan.sortBiblioRank],
+    ["bangers", t.scan.sortBangers],
     ["profit30", t.scan.sortProfit30],
     ["buyback", t.scan.sortBuyback],
     ["profit", t.scan.sortProfit],
@@ -188,6 +213,11 @@ export function ScanViewer({ photos, detections, t, country, lists, path, locale
             <button className="btn-primary" onClick={exportCsv}>
               {t.scan.export}
             </button>
+            {bangers.length > 0 && (
+              <button className="btn rounded-full bg-yellow-400 font-semibold text-yellow-950" onClick={() => setShowBangers(true)}>
+                {fmt(t.scan.bangersButton, { n: bangers.length })}
+              </button>
+            )}
             <input className="input min-w-0 flex-1" placeholder={t.scan.search} value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
           <p className="text-center font-semibold">{t.scan.sortBy}</p>
@@ -224,6 +254,22 @@ export function ScanViewer({ photos, detections, t, country, lists, path, locale
           />
         ))}
       </div>
+
+      {showBangers && bangers.length > 0 && (
+        <BangerPopup
+          bangers={bangers}
+          t={t}
+          locale={locale}
+          onClose={() => setShowBangers(false)}
+          onSee={(d) => {
+            setShowBangers(false);
+            setQ("");
+            setSelected(d.id);
+            // On attend que la liste soit rendue sans filtre avant de faire défiler.
+            setTimeout(() => document.getElementById(d.id)?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+          }}
+        />
+      )}
     </div>
   );
 }
