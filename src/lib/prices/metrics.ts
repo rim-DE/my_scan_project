@@ -81,7 +81,8 @@ export function shortAge(date: Date | string, now = new Date(), locale = "fr"): 
   // Moins d'un jour : en heures, comme « il y a 2h » dans BiblioScan.
   if (days === 0) return `${Math.floor(ms / 3600000)}h`;
   const [d, m, y] = locale === "en" ? ["d", "mo", "y"] : ["j", "m", "a"];
-  if (days < 30) return `${days}${d}`;
+  // En jours jusqu'à 2 mois : « 1m » répété dans le tableau des ventes ne dirait rien.
+  if (days < 60) return `${days}${d}`;
   const months = Math.floor(days / 30.44);
   if (months < 12) return `${months}${m}`;
   const years = Math.floor(months / 12);
