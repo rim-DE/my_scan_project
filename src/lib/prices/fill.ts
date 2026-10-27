@@ -13,7 +13,7 @@ export async function booksMissingPrices(scanId: string, country: string): Promi
   const ids = enabledProviders().map((p) => p.id);
   if (ids.length === 0) return [];
   const books = await prisma.book.findMany({
-    where: { isbn13: { not: null }, detections: { some: { scanId } } },
+    where: { detections: { some: { scanId } } },
     select: { id: true, fetches: { where: { country }, select: { provider: true, ok: true, fetchedAt: true } } },
   });
   const oldest = (b: (typeof books)[number]) => Math.min(Infinity, ...b.fetches.map((f) => f.fetchedAt.getTime()));

@@ -122,6 +122,8 @@ model Book {
   id             String             @id @default(cuid())
   isbn13         String?            @unique
   isbn10         String?
+  /// Fiche Amazon trouvée par titre, pour les livres sans ISBN (souvent d'avant 1970).
+  asin           String?
   title          String
   authors        String[]
   publisher      String?

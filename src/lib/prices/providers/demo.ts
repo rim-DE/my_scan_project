@@ -60,6 +60,6 @@ export const demoProvider: PriceProvider = {
   source: "demo",
   enabled: () => env.priceDemoMode(),
   async fetch(book, country) {
-    return { observations: demoPrices(book.isbn13, country) };
+    return { observations: book.isbn13 ? demoPrices(book.isbn13, country) : [] };
   },
 };

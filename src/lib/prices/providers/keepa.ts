@@ -1,7 +1,8 @@
 // Keepa (payant, https://keepa.com/#!api) : données Amazon sous licence.
 // C'est l'alternative légale au scraping d'Amazon, interdit par ses CGU.
 import { env } from "../../env";
-import type { BookInfo, PriceObservation, PriceProvider, SalesEstimate } from "../types";
+import { normalizeText } from "../../books";
+import type { BookInfo, BookRef, PriceObservation, PriceProvider, ProviderResult, SalesEstimate } from "../types";
 
 // Identifiants de marketplace Amazon chez Keepa.
 const DOMAINS: Record<string, { id: number; currency: string; host: string }> = {
@@ -17,6 +18,8 @@ const DOMAINS: Record<string, { id: number; currency: string; host: string }> = 
 
 interface KeepaProduct {
   asin?: string;
+  title?: string;
+  author?: string;
   /** Historiques : csv[type] = [temps Keepa, valeur, temps Keepa, valeur, …]. */
   csv?: (number[] | null)[];
   stats?: { current?: number[]; salesRankDrops30?: number; salesRankDrops365?: number };
@@ -134,28 +137,79 @@ export const keepaProvider: PriceProvider = {
   enabled: () => Boolean(env.keepaApiKey()),
   async fetch(book, country) {
     const d = DOMAINS[country] ?? DOMAINS.FR;
+    // Livre sans ISBN (édition ancienne) : on cherche sa fiche Amazon par titre, puis on retient l'ASIN.
+    if (!book.isbn13 && !book.asin) return searchByTitle(book, country);
     const url = new URL("https://api.keepa.com/product");
-    url.searchParams.set("key", env.keepaApiKey()!);
     url.searchParams.set("domain", String(d.id));
-    url.searchParams.set("code", book.isbn13);
+    if (book.isbn13) url.searchParams.set("code", book.isbn13);
+    else url.searchParams.set("asin", book.asin!);
     url.searchParams.set("stats", "90");
     // Note et nombre d'avis (coûte au plus 1 jeton de plus).
     url.searchParams.set("rating", "1");
-    let res = await fetch(url);
-    // 429 = plus de jetons : Keepa indique dans combien de temps il en redonne. On attend une fois (15 s max).
-    if (res.status === 429) {
-      const { refillIn } = (await res.json().catch(() => ({}))) as { refillIn?: number };
-      await new Promise((r) => setTimeout(r, Math.min(Math.max(refillIn ?? 5000, 1000), 15000)));
-      res = await fetch(url);
-    }
-    if (!res.ok) throw new Error(`Keepa HTTP ${res.status}`);
+    const res = await keepaGet(url);
     const json = (await res.json()) as { products?: KeepaProduct[] };
     const p = json.products?.[0];
     if (!p) return { observations: [] };
-    return {
-      observations: [...parseKeepaProduct(p, country), ...parseKeepaSaleHistory(p, country)],
-      sales: parseKeepaSales(p),
-      info: parseKeepaInfo(p),
-    };
+    return productResult(p, country);
   },
 };
+
+function productResult(p: KeepaProduct, country: string): ProviderResult {
+  return {
+    observations: [...parseKeepaProduct(p, country), ...parseKeepaSaleHistory(p, country)],
+    sales: parseKeepaSales(p),
+    info: parseKeepaInfo(p),
+  };
+}
+
+/** Appel Keepa ; 429 = plus de jetons : Keepa indique dans combien de temps il en redonne. On attend une fois (15 s max). */
+async function keepaGet(url: URL): Promise<Response> {
+  url.searchParams.set("key", env.keepaApiKey()!);
+  let res = await fetch(url);
+  if (res.status === 429) {
+    const { refillIn } = (await res.json().catch(() => ({}))) as { refillIn?: number };
+    await new Promise((r) => setTimeout(r, Math.min(Math.max(refillIn ?? 5000, 1000), 15000)));
+    res = await fetch(url);
+  }
+  if (!res.ok) throw new Error(`Keepa HTTP ${res.status}`);
+  return res;
+}
+
+/** Recherche Amazon par titre et auteur (10 jetons), pour les livres sans ISBN. */
+async function searchByTitle(book: BookRef, country: string): Promise<ProviderResult> {
+  const d = DOMAINS[country] ?? DOMAINS.FR;
+  const url = new URL("https://api.keepa.com/search");
+  url.searchParams.set("domain", String(d.id));
+  url.searchParams.set("type", "product");
+  url.searchParams.set("term", [book.title, book.authors[0]].filter(Boolean).join(" "));
+  url.searchParams.set("stats", "90");
+  url.searchParams.set("rating", "1");
+  const res = await keepaGet(url);
+  const json = (await res.json()) as { products?: KeepaProduct[] };
+  const p = pickKeepaMatch(book, json.products ?? []);
+  if (!p?.asin) return { observations: [] };
+  return { ...productResult(p, country), asin: p.asin };
+}
+
+/**
+ * Choisit la fiche Amazon qui correspond au livre : presque tous les mots du titre doivent y être,
+ * et le nom de l'auteur aussi quand on le connaît (sinon on pourrait prendre une réédition d'un autre livre).
+ */
+export function pickKeepaMatch(book: { title: string; authors: string[] }, products: KeepaProduct[]): KeepaProduct | null {
+  const words = (s: string) => normalizeText(s).split(" ").filter((w) => w.length > 2);
+  const titleWords = words(book.title);
+  if (titleWords.length === 0) return null;
+  const surnames = book.authors.map((a) => words(a).at(-1)).filter((w): w is string => Boolean(w));
+  let best: KeepaProduct | null = null;
+  let bestScore = 0;
+  for (const p of products) {
+    const found = new Set(words(`${p.title ?? ""} ${p.author ?? ""}`));
+    const coverage = titleWords.filter((w) => found.has(w)).length / titleWords.length;
+    const authorOk = surnames.length === 0 || surnames.some((s) => found.has(s));
+    if (authorOk && coverage >= 0.75 && coverage > bestScore) {
+      best = p;
+      bestScore = coverage;
+    }
+  }
+  return best;
+}

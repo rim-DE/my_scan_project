@@ -24,8 +24,8 @@ export function resaleSettings() {
 export async function refreshPrices(bookId: string, country: string, opts: { force?: boolean } = {}): Promise<{ rateLimited: boolean }> {
   let rateLimited = false;
   const book = await prisma.book.findUnique({ where: { id: bookId } });
-  if (!book?.isbn13) return { rateLimited };
-  const ref: BookRef = { isbn13: book.isbn13, isbn10: book.isbn10, title: book.title, authors: book.authors };
+  if (!book) return { rateLimited };
+  const ref: BookRef = { isbn13: book.isbn13, isbn10: book.isbn10, asin: book.asin, title: book.title, authors: book.authors };
   const ttl = env.priceCacheTtlHours();
 
   for (const provider of enabledProviders()) {
@@ -36,7 +36,7 @@ export async function refreshPrices(bookId: string, country: string, opts: { for
     if (!opts.force && last?.ok && isFresh(last.fetchedAt, ttl)) continue;
 
     try {
-      const { observations, sales, info } = await provider.fetch(ref, country);
+      const { observations, sales, info, asin } = await provider.fetch(ref, country);
       await prisma.$transaction([
         // On remplace les anciennes données de cette source (les prix saisis à la main sont conservés).
         prisma.priceSnapshot.deleteMany({ where: { bookId, country, source: provider.source, platform: { in: platformsOf(provider.id) } } }),
@@ -54,6 +54,7 @@ export async function refreshPrices(bookId: string, country: string, opts: { for
             observedAt: o.observedAt,
           })),
         }),
+        ...(asin && !book.asin ? [prisma.book.update({ where: { id: bookId }, data: { asin } })] : []),
         ...(sales || info
           ? [
               prisma.book.update({
