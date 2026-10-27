@@ -64,9 +64,13 @@ function valueAt(series: number[] | null | undefined, t: number): number | null 
 }
 
 /**
- * Ventes Amazon des 12 derniers mois, déduites de l'historique : quand le classement des ventes
- * s'améliore, un exemplaire vient d'être vendu. Le prix retenu est l'offre la moins chère à ce moment-là.
+ * Ventes Amazon déduites de l'historique : quand le classement des ventes s'améliore, un exemplaire
+ * vient d'être vendu. Le prix retenu est l'offre la moins chère à ce moment-là.
+ * On garde toutes les ventes des 12 derniers mois, et au moins les 5 dernières même plus anciennes
+ * (comme BiblioScan, qui montre « vendu il y a 5a 2m » quand il n'y a rien de récent).
  */
+const MIN_LAST_SALES = 5;
+
 export function parseKeepaSaleHistory(p: KeepaProduct, country: string, now = new Date()): PriceObservation[] {
   const d = DOMAINS[country] ?? DOMAINS.FR;
   const rank = p.csv?.[SALES_RANK];
@@ -74,16 +78,17 @@ export function parseKeepaSaleHistory(p: KeepaProduct, country: string, now = ne
   const url = p.asin ? `https://www.${d.host}/dp/${p.asin}` : null;
   const since = now.getTime() - 365 * 24 * 3600 * 1000;
   const out: PriceObservation[] = [];
-  for (let i = 2; i + 1 < rank.length; i += 2) {
+  // Du plus récent au plus ancien, pour s'arrêter dès qu'on a l'année et au moins 5 ventes.
+  for (let i = rank.length - 2; i >= 2; i -= 2) {
     const [prev, t, r] = [rank[i - 1], rank[i], rank[i + 1]];
     if (!(prev > 0 && r > 0 && r < prev)) continue;
     const soldAt = keepaTimeToDate(t);
-    if (soldAt.getTime() < since) continue;
+    if (soldAt.getTime() < since && out.length >= MIN_LAST_SALES) break;
     const prices = [AMAZON, NEW, USED].map((k) => valueAt(p.csv?.[k], t)).filter((v): v is number => v !== null && v > 0);
     if (!prices.length) continue;
     out.push({ platform: "amazon", offerType: "SOLD", priceCents: Math.min(...prices), currency: d.currency, url, observedAt: soldAt });
   }
-  return out;
+  return out.reverse();
 }
 
 /**

@@ -73,6 +73,15 @@ describe("sources de prix", () => {
     expect(parseKeepaSaleHistory({}, "FR", now)).toEqual([]);
   });
 
+  it("garde les dernières ventes même anciennes quand rien ne s'est vendu cette année", () => {
+    const now = new Date("2026-10-26T12:00:00Z");
+    const k = (days: number) => Math.round((now.getTime() - days * 86400000) / 60000) - 21564000;
+    // Une seule vente, il y a ~5 ans, à 3 €.
+    const product = { csv: [null, null, [k(2000), 300], [k(2000), 9000, k(1890), 5000]] };
+    const sales = parseKeepaSaleHistory(product, "FR", now);
+    expect(sales.map((s) => [Math.round((now.getTime() - s.observedAt!.getTime()) / 86400000), s.priceCents])).toEqual([[1890, 300]]);
+  });
+
   it("le mode démo est déterministe et invente aussi des ventes passées datées", () => {
     const now = new Date("2026-10-25T12:00:00Z");
     expect(demoPrices("9781452151755", "FR", now)).toEqual(demoPrices("9781452151755", "FR", now));

@@ -12,7 +12,7 @@ describe("indicateurs façon BiblioScan", () => {
       { platform: "ebay", offerType: "SOLD", priceCents: 2500, observedAt: daysAgo(10) },
       { platform: "ebay", offerType: "SOLD", priceCents: 2300, observedAt: daysAgo(60) },
       { platform: "ebay", offerType: "SOLD", priceCents: 2400, observedAt: daysAgo(200) },
-      { platform: "ebay", offerType: "SOLD", priceCents: 9900, observedAt: daysAgo(500) }, // trop ancienne
+      { platform: "ebay", offerType: "SOLD", priceCents: 9900, observedAt: daysAgo(500) }, // hors des 12 mois, mais montrée dans les dernières ventes
       { platform: "ebay", offerType: "USED", priceCents: 2600, observedAt: daysAgo(1) },
       { platform: "ebay", offerType: "NEW", priceCents: 3000, observedAt: daysAgo(1) },
     ];
@@ -20,7 +20,7 @@ describe("indicateurs façon BiblioScan", () => {
     const m = computeMetrics(points, stats, { listPriceCents: 3000, sales12m: null, sales30d: null }, NOW);
     expect(m.sales12m).toBe(3);
     expect(m.sales30d).toBe(1);
-    expect(m.lastSales.map((s) => s.priceCents)).toEqual([2500, 2300, 2400]);
+    expect(m.lastSales.map((s) => s.priceCents)).toEqual([2500, 2300, 2400, 9900]);
     expect(m.sales).toHaveLength(3);
     expect(m.sales[0].platform).toBe("ebay");
     // Médiane des ventes de l'année 2400 (les offres en cours ne comptent pas).

@@ -19,7 +19,7 @@ export interface BookMetrics {
   /** Nombre de ventes sur 12 mois / 30 jours (source : Keepa si configuré, sinon les ventes enregistrées). */
   sales12m: number | null;
   sales30d: number | null;
-  /** Les 5 ventes les plus récentes, de la plus récente à la plus ancienne. */
+  /** Les 5 ventes les plus récentes, de la plus récente à la plus ancienne (même au-delà de 12 mois). */
   lastSales: SaleRow[];
   /** Toutes les ventes des 12 derniers mois (historique), de la plus récente à la plus ancienne. */
   sales: SaleRow[];
@@ -74,11 +74,11 @@ export function computeMetrics(
   now = new Date(),
   opts: { bangerMinProfitCents?: number } = {},
 ): BookMetrics {
-  const sold = points
+  const allSold = points
     .filter((p) => p.offerType === "SOLD")
     .map((p) => ({ priceCents: p.priceCents, soldAt: new Date(p.observedAt), platform: p.platform }))
-    .filter((p) => now.getTime() - p.soldAt.getTime() <= 365 * DAY)
     .sort((a, b) => b.soldAt.getTime() - a.soldAt.getTime());
+  const sold = allSold.filter((p) => now.getTime() - p.soldAt.getTime() <= 365 * DAY);
   const recorded30d = sold.filter((p) => now.getTime() - p.soldAt.getTime() <= 30 * DAY).length;
   const recorded90d = sold.filter((p) => now.getTime() - p.soldAt.getTime() <= 90 * DAY).length;
 
@@ -104,12 +104,13 @@ export function computeMetrics(
     buybackCents: stats.buybackMaxCents,
   });
 
-  const rows = sold.map((p) => ({ priceCents: p.priceCents, soldAt: p.soldAt.toISOString(), platform: p.platform }));
+  const toRow = (p: (typeof allSold)[number]) => ({ priceCents: p.priceCents, soldAt: p.soldAt.toISOString(), platform: p.platform });
   return {
     sales12m,
     sales30d,
-    lastSales: rows.slice(0, 5),
-    sales: rows,
+    // Même sans vente cette année, on montre les dernières connues, comme BiblioScan.
+    lastSales: allSold.slice(0, 5).map(toRow),
+    sales: sold.map(toRow),
     weightedProfit30dCents,
     ratio,
     currentPriceCents: offers.length ? Math.min(...offers.map((p) => p.priceCents)) : null,
