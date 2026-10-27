@@ -20,6 +20,9 @@ interface KeepaProduct {
   /** Historiques : csv[type] = [temps Keepa, valeur, temps Keepa, valeur, …]. */
   csv?: (number[] | null)[];
   stats?: { current?: number[]; salesRankDrops30?: number; salesRankDrops365?: number };
+  /** Images Amazon : ancien format « a.jpg,b.jpg » ou liste d'objets (l = grande, m = moyenne). */
+  imagesCSV?: string;
+  images?: { l?: string; m?: string }[];
 }
 
 // Index des séries Keepa (dans "csv" et "stats.current").
@@ -52,7 +55,14 @@ export function parseKeepaInfo(p: KeepaProduct): BookInfo {
     rating: rating !== null ? rating / 10 : null,
     reviewCount: typeof cur[COUNT_REVIEWS] === "number" && cur[COUNT_REVIEWS] >= 0 ? cur[COUNT_REVIEWS] : null,
     listPriceCents: pos(cur[LIST_PRICE]),
+    coverUrl: keepaCoverUrl(p),
   };
+}
+
+/** Couverture Amazon du livre (première image de la fiche). */
+export function keepaCoverUrl(p: KeepaProduct): string | null {
+  const name = p.images?.[0]?.l ?? p.images?.[0]?.m ?? p.imagesCSV?.split(",")[0];
+  return name ? `https://m.media-amazon.com/images/I/${name.trim()}` : null;
 }
 
 /** Valeur d'une série Keepa à un instant donné (dernier point connu avant cet instant). */

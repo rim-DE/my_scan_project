@@ -5,6 +5,7 @@ import type { Dict } from "@/lib/i18n";
 import { fmt } from "@/lib/i18n";
 import type { DetectionView } from "@/lib/queries";
 import { formatPrice } from "@/lib/money";
+import { BookCover } from "./BookCover";
 
 interface Props {
   bangers: DetectionView[];
@@ -35,12 +36,7 @@ export function BangerPopup({ bangers, t, locale, onSee, onClose }: Props) {
         </div>
         <p className="text-sm text-slate-600">{t.scan.bangerIntro}</p>
         <div className="flex gap-3">
-          {b.coverUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={b.coverUrl} alt={b.title} className="h-36 w-24 shrink-0 rounded-lg object-cover shadow" />
-          ) : (
-            <div className="grid h-36 w-24 shrink-0 place-items-center rounded-lg bg-mint text-4xl">📕</div>
-          )}
+          <BookCover src={b.coverUrl} isbn13={b.isbn13} alt={b.title} className="h-36 w-24 shrink-0 rounded-lg shadow" />
           <div className="min-w-0 space-y-1">
             <p className="font-semibold leading-tight">{b.title}</p>
             <p className="text-sm text-slate-600">{b.authors.join(", ")}</p>

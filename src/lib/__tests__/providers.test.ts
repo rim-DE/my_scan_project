@@ -45,8 +45,11 @@ describe("sources de prix", () => {
       rating: 4.6,
       reviewCount: 3605,
       listPriceCents: 2800,
+      coverUrl: null,
     });
-    expect(parseKeepaInfo({})).toEqual({ offerCount: null, salesRank: null, rating: null, reviewCount: null, listPriceCents: null });
+    expect(parseKeepaInfo({})).toEqual({ offerCount: null, salesRank: null, rating: null, reviewCount: null, listPriceCents: null, coverUrl: null });
+    expect(parseKeepaInfo({ imagesCSV: "51abc.jpg,41def.jpg" }).coverUrl).toBe("https://m.media-amazon.com/images/I/51abc.jpg");
+    expect(parseKeepaInfo({ images: [{ l: "71big.jpg", m: "41mid.jpg" }] }).coverUrl).toBe("https://m.media-amazon.com/images/I/71big.jpg");
   });
 
   it("déduit les ventes Amazon datées de l'historique du classement Keepa", () => {
