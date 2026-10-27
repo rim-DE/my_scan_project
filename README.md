@@ -24,7 +24,7 @@ Pas encore inclus : Tarifs, Guide, Contact (prévus plus tard), application mobi
 - **Next.js 15 + TypeScript + Tailwind CSS** : un seul projet pour l'interface et le serveur (routes API, actions serveur), typé de bout en bout, et déployable en un clic sur Vercel. La même base servira plus tard d'API pour une appli mobile.
 - **PostgreSQL + Prisma** : base relationnelle solide (scans → photos → livres détectés → prix), Prisma génère des types TypeScript à partir du schéma et gère les migrations.
 - **API Claude (vision)** : un seul appel par photo repère tous les livres, lit les tranches (même verticales ou abîmées) et renvoie un JSON validé (titre, auteur, éditeur, ISBN s'il est lisible, position du livre sur la photo).
-- **Google Books puis Open Library** : catalogues publics et gratuits pour retrouver l'ISBN, l'éditeur et la couverture à partir du titre lu.
+- **Google Books, puis la BnF, puis Open Library** : catalogues publics et gratuits pour retrouver l'ISBN, l'éditeur et la couverture à partir du titre lu. La BnF connaît presque tous les livres publiés en France et prend le relais quand Google sature.
 - **File d'attente** : la table `Scan` sert de file (statut `PENDING`). Le traitement démarre juste après l'envoi (`after()` de Next.js). Un filet de sécurité reprend les scans bloqués : la route `/api/cron` (Vercel Cron, toutes les 10 min) ou `npm run worker` sur un serveur classique. Pas besoin de Redis pour un usage perso ; on pourra passer à une vraie file (Inngest, BullMQ…) si le volume augmente.
 - **Stockage des photos** : dossier local en développement, S3 ou compatible (Cloudflare R2, Scaleway…) en production.
 - **Cache des prix** : chaque appel à une source de prix est mémorisé (`PriceFetch`) ; la source n'est pas rappelée avant `PRICE_CACHE_TTL_HOURS` (24 h par défaut). Les recherches titre → livre sont aussi mises en cache (`LookupCache`).
@@ -162,7 +162,7 @@ src/lib/vision.ts           détection des livres par Claude (contours à 4 coin
 src/lib/geometry.ts         contours, recouvrement, redressement des tranches
 src/components/BookPanels.tsx  boutons emplacement / historique / « … » d'un livre
 src/lib/report.ts           page HTML autonome de résultats
-src/lib/books.ts            Google Books / Open Library
+src/lib/books.ts            Google Books / BnF / Open Library
 src/lib/catalog.ts          enregistrement des livres + cache des recherches
 src/lib/prices/             sources de prix, plateformes, calculs, cache
 src/lib/scan-processor.ts   traitement asynchrone d'un scan
