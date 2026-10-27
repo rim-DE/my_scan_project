@@ -152,8 +152,11 @@ L'image fait ${w} × ${h} pixels.
 
 Pour chaque livre :
 - "title" : le titre complet tel que tu le lis, y compris les petits mots écrits au-dessus ou à côté du mot principal
-  (« Le Grand Larousse de la grossesse », pas seulement « Grossesse ») ; corrige seulement les erreurs évidentes de lecture ;
-- "author", "publisher" : si lisibles, sinon null ;
+  (« Le Grand Larousse de la grossesse », pas seulement « Grossesse ») ; corrige seulement les erreurs évidentes de lecture.
+  Si un mot est coupé par le bord de la photo ou caché par un autre livre, complète-le seulement si tu reconnais le titre
+  avec certitude (« …mbous rustiques » → « Bambous rustiques ») ; sinon laisse-le tel quel ;
+- "author", "publisher" : si lisibles, sinon null ; regarde bien les petits caractères de la tranche, l'auteur y est souvent
+  écrit plus petit que le titre ;
 - "isbn" : uniquement s'il est réellement lisible, sinon null (n'invente jamais d'ISBN) ;
 - "corners" : les 4 coins de la tranche (ou de la couverture si le livre est vu de face), tels qu'ils sont sur la photo,
   dans l'ordre haut-gauche, haut-droit, bas-droit, bas-gauche. Coordonnées en pixels (0,0 = coin haut gauche,

@@ -31,6 +31,15 @@ describe("identification des livres", () => {
     expect(scoreCandidate({ title: "Grossesse" }, { ...osteo, title: "Grossesse" })).toBeGreaterThan(MIN_MATCH_SCORE);
   });
 
+  it("un mot coupé sur la tranche ne valide pas un autre titre", () => {
+    const base = { isbn10: null, publishedDate: null, language: "fr", pageCount: null, coverUrl: null, listPriceCents: null, source: "google" as const, publisher: null };
+    const jeux = { ...base, isbn13: null, title: "Les jeux rustiques", authors: ["Louis Beydts"] };
+    const bambous = { ...base, isbn13: "9782841382958", title: "Bambous rustiques", authors: ["Paul Whittaker"] };
+    expect(scoreCandidate({ title: "mbous rustiques" }, jeux)).toBeLessThan(MIN_MATCH_SCORE);
+    expect(scoreCandidate({ title: "mbous rustiques" }, bambous)).toBeGreaterThan(MIN_MATCH_SCORE);
+    expect(scoreCandidate({ title: "Bambous rustiques", author: "Paul Whittaker" }, bambous)).toBeGreaterThan(0.95);
+  });
+
   it("préfère l'édition dans la langue du scan", () => {
     const base = { isbn10: null, authors: ["Nicolas Vanier"], publisher: null, publishedDate: null, pageCount: null, coverUrl: null, listPriceCents: null, source: "google" as const };
     const polish = { ...base, isbn13: "9788381880466", title: "Bella i Sebastian - Nicolas Vanier [KSIĄŻKA]", language: "pl" };

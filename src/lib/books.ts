@@ -65,6 +65,16 @@ function publisherMatches(read: string, c: BookInfo): boolean {
   return words.some((w) => found.has(w));
 }
 
+/**
+ * Part des mots lus présents dans le titre trouvé. Un mot coupé par le bord de la tranche (« mbous ») compte
+ * s'il termine ou commence un mot du titre (« bambous »).
+ */
+export function wordCoverage(readWords: string[], candidateTitle: string): number {
+  const found = [...tokens(candidateTitle)];
+  const hit = (w: string) => found.some((f) => f === w || (w.length >= 4 && (f.endsWith(w) || f.startsWith(w))));
+  return readWords.filter(hit).length / readWords.length;
+}
+
 export function scoreCandidate(query: TitleQuery, c: BookInfo): number {
   const authorNames = query.author ? [query.author, ...c.authors] : c.authors;
   const titleScore = titleSimilarity(query.title, c.title, authorNames);
@@ -74,7 +84,11 @@ export function scoreCandidate(query: TitleQuery, c: BookInfo): number {
   // ou bien l'auteur ou l'éditeur lus sur la tranche pour confirmer.
   const names = new Set(authorNames.flatMap((n) => [...tokens(n)]));
   const readWords = [...tokens(query.title)].filter((w) => !names.has(w));
-  if (readWords.length === 1 && titleScore < 1 && !sameEditor && !(authorScore !== null && authorScore >= 0.5)) return 0;
+  const authorOk = authorScore !== null && authorScore >= 0.5;
+  if (readWords.length === 1 && titleScore < 1 && !sameEditor && !authorOk) return 0;
+  // Sans auteur pour confirmer, les deux tiers des mots lus doivent être dans le titre trouvé :
+  // « …mbous rustiques » ne doit pas devenir « Les jeux rustiques ».
+  if (!authorOk && readWords.length > 1 && wordCoverage(readWords, c.title) < 2 / 3) return 0;
   let score = titleScore;
   if (authorScore !== null) score = score * 0.75 + authorScore * 0.25;
   if (sameEditor) score += 0.1;
@@ -389,6 +403,6 @@ function oneWordTitle(query: TitleQuery): boolean {
 }
 
 export function lookupCacheKey(title: string, author: string | null | undefined, language: string, publisher?: string | null): string {
-  // "v7" : on oublie les correspondances trouvées avec un seul mot du titre (« Grossesse » → « Ostéopathie & grossesse »).
-  return `v7|${language}|${normalizeText(title)}|${normalizeText(author ?? "")}|${normalizeText(publisher ?? "")}`;
+  // "v8" : on oublie les correspondances trouvées avec trop peu de mots du titre (« Grossesse », « …mbous rustiques »).
+  return `v8|${language}|${normalizeText(title)}|${normalizeText(author ?? "")}|${normalizeText(publisher ?? "")}`;
 }

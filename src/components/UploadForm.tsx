@@ -100,7 +100,8 @@ export function UploadForm({ t }: Props) {
         <p className="text-xs text-slate-500">{t.dropHint}</p>
         <p className="mt-1 text-xs text-slate-500">{t.dropFormats}</p>
       </button>
-      <input ref={input} type="file" accept="image/*,.heic,.heif" capture="environment" multiple hidden onChange={(e) => addFiles(e.target.files)} />
+      {/* Sans « capture » : sur téléphone, on peut choisir une photo de la galerie ou en prendre une. */}
+      <input ref={input} type="file" accept="image/*,.heic,.heif" multiple hidden onChange={(e) => addFiles(e.target.files)} />
 
       {files.length > 0 && (
         <ul className="flex flex-wrap gap-2">
