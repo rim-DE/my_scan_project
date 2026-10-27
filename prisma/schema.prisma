@@ -70,6 +70,8 @@ model Scan {
   error        String?
   startedAt    DateTime?
   finishedAt   DateTime?
+  /// Récupération des prix manquants en cours depuis (évite deux récupérations en même temps).
+  pricesFillAt DateTime?
   createdAt    DateTime    @default(now())
   photos       Photo[]
   detections   Detection[]

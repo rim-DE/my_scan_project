@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { after } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { getLocale } from "@/lib/i18n/server";
@@ -7,11 +8,12 @@ import { fmt, getDict } from "@/lib/i18n";
 import { getScanView } from "@/lib/queries";
 import { identifyMissingAction, refreshScanPricesAction, retryScanAction } from "@/app/actions";
 import { StatusBadge } from "@/components/StatusBadge";
-import { AutoRefresh } from "@/components/AutoRefresh";
+import { AutoRefresh, PricesAutoRefresh } from "@/components/AutoRefresh";
+import { fillMissingPrices } from "@/lib/prices/fill";
 import { ScanViewer } from "@/components/ScanViewer";
 import { ScanActionButton } from "@/components/ScanActionButton";
 
-// « Actualiser tous les prix » interroge les sources pour chaque livre du scan.
+// « Actualiser tous les prix » et la récupération des prix manquants interrogent les sources pour chaque livre.
 export const maxDuration = 300;
 
 const FLAGS: Record<string, string> = { FR: "🇫🇷", US: "🇺🇸", DE: "🇩🇪", GB: "🇬🇧", JP: "🇯🇵", CA: "🇨🇦", IT: "🇮🇹", ES: "🇪🇸" };
@@ -27,6 +29,9 @@ export default async function ScanPage({ params }: { params: Promise<{ id: strin
   const lists = await prisma.shoppingList.findMany({ where: { userId: user.id }, select: { id: true, name: true } });
   const running = scan.status === "PENDING" || scan.status === "PROCESSING";
   const missing = detections.filter((d) => !d.book && d.rawTitle).length;
+  const waitingPrices = new Set(detections.flatMap((d) => (d.book?.priceStatus === "waiting" ? [d.book.id] : []))).size;
+  // Prix pas encore récupérés (ex. jetons Keepa épuisés pendant le scan) : on les récupère en tâche de fond.
+  if (!running && waitingPrices > 0) after(() => fillMissingPrices(scan.id).catch((e) => console.warn("[prix] récupération", e)));
 
   return (
     <>
@@ -63,6 +68,14 @@ export default async function ScanPage({ params }: { params: Promise<{ id: strin
           <span className="h-4 w-4 animate-spin rounded-full border-2 border-brand border-t-transparent" />
           {t.scan.processing}
           <AutoRefresh scanId={scan.id} status={scan.status} detections={detections.length} />
+        </div>
+      )}
+
+      {!running && waitingPrices > 0 && (
+        <div className="card flex items-center gap-3 text-sm">
+          <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-brand border-t-transparent" />
+          {fmt(t.scan.pricesWaiting, { n: waitingPrices })}
+          <PricesAutoRefresh />
         </div>
       )}
 

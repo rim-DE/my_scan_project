@@ -21,9 +21,10 @@ export function resaleSettings() {
  * Met à jour les prix d'un livre. Une source déjà interrogée depuis moins de PRICE_CACHE_TTL_HOURS
  * n'est pas rappelée (sauf force=true) : c'est ce qui limite les coûts et les quotas.
  */
-export async function refreshPrices(bookId: string, country: string, opts: { force?: boolean } = {}): Promise<void> {
+export async function refreshPrices(bookId: string, country: string, opts: { force?: boolean } = {}): Promise<{ rateLimited: boolean }> {
+  let rateLimited = false;
   const book = await prisma.book.findUnique({ where: { id: bookId } });
-  if (!book?.isbn13) return;
+  if (!book?.isbn13) return { rateLimited };
   const ref: BookRef = { isbn13: book.isbn13, isbn10: book.isbn10, title: book.title, authors: book.authors };
   const ttl = env.priceCacheTtlHours();
 
@@ -81,6 +82,7 @@ export async function refreshPrices(bookId: string, country: string, opts: { for
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       console.warn(`[prices] ${provider.id} a échoué pour ${book.isbn13}: ${message}`);
+      if (message.includes("429")) rateLimited = true;
       await prisma.priceFetch.upsert({
         where: { bookId_provider_country: { bookId, provider: provider.id, country } },
         create: { bookId, provider: provider.id, country, ok: false, error: message },
@@ -88,6 +90,7 @@ export async function refreshPrices(bookId: string, country: string, opts: { for
       });
     }
   }
+  return { rateLimited };
 }
 
 /** Plateformes alimentées par chaque source (pour savoir quelles lignes remplacer). */

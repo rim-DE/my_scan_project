@@ -17,3 +17,17 @@ export function AutoRefresh({ scanId, status, detections }: { scanId: string; st
   }, [scanId, status, detections, router]);
   return null;
 }
+
+/** Rafraîchit la page toutes les 20 s pendant que les prix manquants arrivent (20 min au plus). */
+export function PricesAutoRefresh() {
+  const router = useRouter();
+  useEffect(() => {
+    const started = Date.now();
+    const timer = setInterval(() => {
+      if (Date.now() - started > 20 * 60_000) clearInterval(timer);
+      else router.refresh();
+    }, 20_000);
+    return () => clearInterval(timer);
+  }, [router]);
+  return null;
+}
