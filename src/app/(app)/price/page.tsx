@@ -36,7 +36,7 @@ export default async function PricePage({ searchParams }: { searchParams: Promis
   let result = null;
   if (bookId) {
     await refreshPrices(bookId, country);
-    const book = await prisma.book.findUnique({ where: { id: bookId }, include: { prices: true } });
+    const book = await prisma.book.findUnique({ where: { id: bookId }, include: { prices: true, fetches: true } });
     if (book) result = toBookView(book, country);
   }
   const lists = await prisma.shoppingList.findMany({ where: { userId: user.id }, select: { id: true, name: true } });

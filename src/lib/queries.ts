@@ -2,7 +2,8 @@
 import "server-only";
 import { prisma } from "./db";
 import { computeStats, bestByPlatform, type PriceStats } from "./prices/stats";
-import { resaleSettings } from "./prices";
+import { enabledProviders, resaleSettings } from "./prices";
+import { priceStatus, type PriceStatus } from "./prices/status";
 import type { BadgeStats } from "./badges";
 import type { Prisma } from "@prisma/client";
 import type { NormalizedBox, Point, TextDirection } from "./geometry";
@@ -35,10 +36,14 @@ export interface BookView {
   stats: PriceStats;
   metrics: BookMetrics;
   prices: PriceRow[];
+  /** Pourquoi il n'y a pas (encore) de prix : voir PriceStatus. */
+  priceStatus: PriceStatus;
   hasDemo: boolean;
 }
 
-type BookWithPrices = Prisma.BookGetPayload<{ include: { prices: true } }>;
+type BookWithPrices = Prisma.BookGetPayload<{ include: { prices: true } }> & {
+  fetches?: { provider: string; country: string; ok: boolean }[];
+};
 
 export function toBookView(book: BookWithPrices, country: string): BookView {
   const snaps = book.prices.filter((p) => p.country === country);
@@ -71,6 +76,11 @@ export function toBookView(book: BookWithPrices, country: string): BookView {
     stats,
     metrics: computeMetrics(snaps, stats, book),
     prices: bestByPlatform(rows),
+    priceStatus: priceStatus(
+      (book.fetches ?? []).filter((f) => f.country === country),
+      snaps.length,
+      enabledProviders().map((p) => p.id),
+    ),
     hasDemo: snaps.some((s) => s.source === "demo"),
   };
 }
@@ -95,7 +105,7 @@ export async function getScanView(scanId: string, userId: string) {
     where: { id: scanId, userId },
     include: {
       photos: { orderBy: { position: "asc" } },
-      detections: { orderBy: { createdAt: "asc" }, include: { book: { include: { prices: true } } } },
+      detections: { orderBy: { createdAt: "asc" }, include: { book: { include: { prices: true, fetches: true } } } },
     },
   });
   if (!scan) return null;

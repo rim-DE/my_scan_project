@@ -291,7 +291,9 @@ export function BookCard({ detection, photo, photos = [], t, country, lists, pat
       )}
 
       {b.prices.length === 0 ? (
-        <p className="text-sm text-slate-500">{t.book.noPrice}</p>
+        <p className="text-sm text-slate-500">
+          {b.priceStatus === "waiting" ? t.book.noPriceWaiting : b.priceStatus === "notFound" ? t.book.noPriceNotFound : t.book.noPrice}
+        </p>
       ) : (
         <details className="overflow-x-auto">
           <summary className="cursor-pointer text-sm text-brand">{fmt(t.book.allOffers, { n: b.prices.length })}</summary>
