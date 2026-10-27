@@ -20,6 +20,17 @@ describe("identification des livres", () => {
     expect(scoreCandidate({ title: "Pirates corsaires et flibustiers", author: null }, c)).toBeLessThan(MIN_MATCH_SCORE);
   });
 
+  it("un seul mot lu ne suffit pas, sauf avec l'éditeur ou l'auteur", () => {
+    const base = { isbn10: null, publishedDate: null, language: "fr", pageCount: null, coverUrl: null, listPriceCents: null, source: "google" as const };
+    const osteo = { ...base, isbn13: "9791092847079", title: "Ostéopathie & grossesse", authors: ["Bernard Ferru"], publisher: "TITA éditions" };
+    const larousse = { ...base, isbn13: "9782036054134", title: "Le Grand Larousse de la grossesse", authors: [], publisher: "Larousse" };
+    expect(scoreCandidate({ title: "Grossesse" }, osteo)).toBeLessThan(MIN_MATCH_SCORE);
+    expect(scoreCandidate({ title: "Grossesse", publisher: "Larousse" }, osteo)).toBeLessThan(MIN_MATCH_SCORE);
+    expect(scoreCandidate({ title: "Grossesse", publisher: "Larousse" }, larousse)).toBeGreaterThan(MIN_MATCH_SCORE);
+    expect(scoreCandidate({ title: "Grossesse", author: "Bernard Ferru" }, osteo)).toBeGreaterThan(MIN_MATCH_SCORE);
+    expect(scoreCandidate({ title: "Grossesse" }, { ...osteo, title: "Grossesse" })).toBeGreaterThan(MIN_MATCH_SCORE);
+  });
+
   it("préfère l'édition dans la langue du scan", () => {
     const base = { isbn10: null, authors: ["Nicolas Vanier"], publisher: null, publishedDate: null, pageCount: null, coverUrl: null, listPriceCents: null, source: "google" as const };
     const polish = { ...base, isbn13: "9788381880466", title: "Bella i Sebastian - Nicolas Vanier [KSIĄŻKA]", language: "pl" };

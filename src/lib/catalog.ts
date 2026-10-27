@@ -32,8 +32,8 @@ export async function findOrCreateBookByIsbn(raw: string) {
   return upsertBook({ ...info, isbn13: norm.isbn13, isbn10: info.isbn10 ?? norm.isbn10 });
 }
 
-export async function findOrCreateBookByTitle(q: { title: string; author?: string | null; language: string }) {
-  const key = lookupCacheKey(q.title, q.author, q.language);
+export async function findOrCreateBookByTitle(q: { title: string; author?: string | null; publisher?: string | null; language: string }) {
+  const key = lookupCacheKey(q.title, q.author, q.language, q.publisher);
   const cached = await prisma.lookupCache.findUnique({ where: { key } });
   if (cached) return cached.bookId ? prisma.book.findUnique({ where: { id: cached.bookId } }) : null;
 

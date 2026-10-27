@@ -38,7 +38,7 @@ export async function processScan(scanId: string): Promise<void> {
         await mapLimit(detected, 4, async (d) => {
           let book = d.isbn ? await findOrCreateBookByIsbn(d.isbn) : null;
           if (!book) {
-            book = await findOrCreateBookByTitle({ title: d.title, author: d.author, language: scan.bookLanguage }).catch((e) => {
+            book = await findOrCreateBookByTitle({ title: d.title, author: d.author, publisher: d.publisher, language: scan.bookLanguage }).catch((e) => {
               console.warn("[scan] identification impossible", d.title, e);
               return null;
             });

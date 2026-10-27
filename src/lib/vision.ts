@@ -145,11 +145,14 @@ const LANGUAGE_NAMES: Record<string, string> = {
 const SHELF_PROMPT = (language: string, w: number, h: number) => `Tu analyses la photo d'une ou plusieurs étagères ou piles de livres.
 Sois EXHAUSTIF : repère chaque livre dont on peut lire au moins un mot sur la tranche ou la couverture (titre, auteur ou éditeur),
 y compris les livres fins, penchés, couchés à plat, sur un meuble voisin ou coupés par le bord de la photo.
+Deux tranches voisines de la même couleur sont deux livres distincts : sépare-les dès que le texte, la police, l'éditeur
+ou le sens de lecture change, et ne réunis jamais deux livres dans une même forme.
 Les livres sont majoritairement en ${LANGUAGE_NAMES[language] ?? language}.
 L'image fait ${w} × ${h} pixels.
 
 Pour chaque livre :
-- "title" : le titre tel que tu le lis (corrige seulement les erreurs évidentes de lecture) ;
+- "title" : le titre complet tel que tu le lis, y compris les petits mots écrits au-dessus ou à côté du mot principal
+  (« Le Grand Larousse de la grossesse », pas seulement « Grossesse ») ; corrige seulement les erreurs évidentes de lecture ;
 - "author", "publisher" : si lisibles, sinon null ;
 - "isbn" : uniquement s'il est réellement lisible, sinon null (n'invente jamais d'ISBN) ;
 - "corners" : les 4 coins de la tranche (ou de la couverture si le livre est vu de face), tels qu'ils sont sur la photo,
