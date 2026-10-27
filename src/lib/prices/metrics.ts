@@ -96,20 +96,17 @@ export function computeMetrics(
     .sort((a, b) => b.soldAt.getTime() - a.soldAt.getTime());
   const sold = allSold.filter((p) => now.getTime() - p.soldAt.getTime() <= 365 * DAY);
   const recorded30d = sold.filter((p) => now.getTime() - p.soldAt.getTime() <= 30 * DAY).length;
-  const recorded90d = sold.filter((p) => now.getTime() - p.soldAt.getTime() <= 90 * DAY).length;
 
   // Une source de ventes (Keepa) l'emporte sur nos propres relevés, forcément incomplets.
   const sales12m = book.sales12m ?? (sold.length > 0 ? sold.length : null);
   const sales30d = book.sales30d ?? (sold.length > 0 ? recorded30d : null);
 
-  // Probabilité de vendre dans le mois : ventes mensuelles (moyenne sur 12 mois, ou sur les
-  // 3 derniers mois si le livre s'est mis à mieux se vendre), plafonnées à 1.
-  // Aucune vente cette année mais des ventes plus anciennes : comme BiblioScan, on prend le rythme
-  // des 5 dernières ventes (5 ventes en 2 ans ≈ 0,2 par mois) plutôt que zéro.
+  // Probabilité de vendre dans le mois = ventes par mois, plafonnées à 1. Comme BiblioScan (vérifié sur
+  // ses exports), on prend le rythme des 5 dernières ventes : leur nombre divisé par le nombre de mois
+  // depuis la plus ancienne (5 ventes en 2 ans ≈ 0,2 par mois). Sans historique, les ventes sur 12 mois.
   const last5 = allSold.slice(0, 5);
-  const oldPace =
-    !sales12m && last5.length > 0 ? last5.length / Math.max(1, (now.getTime() - last5[last5.length - 1].soldAt.getTime()) / (30.44 * DAY)) : 0;
-  const perMonth = sales12m !== null || oldPace > 0 ? Math.max((sales12m ?? 0) / 12, recorded90d / 3, oldPace) : null;
+  const pace = last5.length > 0 ? last5.length / Math.max(1, (now.getTime() - last5[last5.length - 1].soldAt.getTime()) / (30.44 * DAY)) : null;
+  const perMonth = pace ?? (sales12m !== null ? sales12m / 12 : null);
   const weightedProfit30dCents =
     stats.netAfterFeesCents !== null && perMonth !== null ? Math.round(stats.netAfterFeesCents * Math.min(1, perMonth)) : null;
 

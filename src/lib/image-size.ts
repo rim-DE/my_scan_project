@@ -10,4 +10,17 @@ export function targetSize(width: number, height: number): { width: number; heig
   return { width: Math.floor(width * scale), height: Math.floor(height * scale) };
 }
 
+/**
+ * Taille gardée pour l'affichage : celle d'une photo de téléphone (12 Mpx). Les vignettes des tranches y sont
+ * découpées : avec une photo réduite à 3,75 Mpx, une tranche fine ne fait que quelques pixels et paraît floue.
+ * Le modèle, lui, reçoit chaque bande réduite à sa taille maximale (voir vision.ts).
+ */
+export const STORE_LONG_EDGE = 4032;
+export const STORE_MAX_PIXELS = 12_200_000;
+
+export function storeSize(width: number, height: number): { width: number; height: number } {
+  const scale = Math.min(1, STORE_LONG_EDGE / Math.max(width, height), Math.sqrt(STORE_MAX_PIXELS / (width * height)));
+  return { width: Math.floor(width * scale), height: Math.floor(height * scale) };
+}
+
 export const MAX_PHOTOS_PER_SCAN = 20;

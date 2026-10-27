@@ -24,9 +24,9 @@ describe("indicateurs façon BiblioScan", () => {
     expect(m.sales).toHaveLength(3);
     expect(m.sales[0].platform).toBe("ebay");
     // Médiane des 5 dernières ventes, même anciennes, comme BiblioScan : 2450 (les offres en cours ne comptent pas).
-    // 2 ventes ces 3 derniers mois = 0,67 vente par mois (mieux que 3 par an).
+    // Rythme des 5 dernières ventes, comme BiblioScan : 4 ventes en 500 jours ≈ 0,24 vente par mois.
     expect(stats.medianCents).toBe(2450);
-    expect(m.weightedProfit30dCents).toBe(1633);
+    expect(m.weightedProfit30dCents).toBe(Math.round(2450 * (4 / (500 / 30.44))));
     expect(m.banger).toBe(false);
     expect(m.ratio).toBe(0.82);
     expect(m.currentPriceCents).toBe(2600);
