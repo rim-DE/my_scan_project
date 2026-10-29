@@ -1,10 +1,13 @@
-// Détection des livres sur une photo par un modèle de vision (Gemini par défaut, ou Claude), en sortie JSON structurée.
+// Détection des livres sur une photo par un modèle de vision (Gemini par défaut, Claude ou un modèle open source
+// via OpenRouter), en sortie JSON structurée.
 import Anthropic from "@anthropic-ai/sdk";
 import sharp from "sharp";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { env } from "./env";
-import { callGemini, GEMINI_SCALE } from "./vision-gemini";
+import { callGemini } from "./vision-gemini";
+import { NORMALIZED_SCALE } from "./vision-json";
+import { callOpenRouter } from "./vision-openrouter";
 import { toModelSize } from "./image";
 import { iou, normalizeQuad, overlapOfSmaller, quadToBox, type NormalizedBox, type Point } from "./geometry";
 
@@ -144,8 +147,8 @@ const LANGUAGE_NAMES: Record<string, string> = {
 };
 
 /**
- * Repère des coordonnées demandé au modèle. Claude donne des pixels ; Gemini est entraîné à donner des positions
- * ramenées de 0 à 1000 sur chaque axe, quelle que soit la taille de l'image : il y est bien plus précis.
+ * Repère des coordonnées demandé au modèle. Claude donne des pixels ; Gemini, Qwen et Gemma sont entraînés à donner
+ * des positions ramenées de 0 à 1000 sur chaque axe, quelle que soit la taille de l'image : ils y sont bien plus précis.
  */
 interface Frame {
   w: number;
@@ -242,17 +245,19 @@ async function callModel(
   image: { data: Buffer; width: number; height: number },
   prompt: (f: Frame) => string,
 ): Promise<DetectedBook[]> {
-  if (env.visionProvider() === "claude") {
+  const provider = env.visionProvider();
+  if (provider === "claude") {
     return callClaude(image.data, prompt({ w: image.width, h: image.height, normalized: false }));
   }
-  const { books } = await callGemini(
+  const call = provider === "openrouter" ? callOpenRouter : callGemini;
+  const { books } = await call(
     image.data,
-    prompt({ w: GEMINI_SCALE, h: GEMINI_SCALE, normalized: true }),
+    prompt({ w: NORMALIZED_SCALE, h: NORMALIZED_SCALE, normalized: true }),
     DetectionResultSchema,
   );
   // Repère 0-1000 -> pixels de l'image envoyée.
-  const sx = image.width / GEMINI_SCALE;
-  const sy = image.height / GEMINI_SCALE;
+  const sx = image.width / NORMALIZED_SCALE;
+  const sy = image.height / NORMALIZED_SCALE;
   return books.map((b) => ({ ...b, corners: b.corners.map((c) => ({ x: Math.round(c.x * sx), y: Math.round(c.y * sy) })) }));
 }
 

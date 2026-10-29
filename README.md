@@ -23,7 +23,7 @@ Pas encore inclus : Tarifs, Guide, Contact (prévus plus tard), application mobi
 
 - **Next.js 15 + TypeScript + Tailwind CSS** : un seul projet pour l'interface et le serveur (routes API, actions serveur), typé de bout en bout, et déployable en un clic sur Vercel. La même base servira plus tard d'API pour une appli mobile.
 - **PostgreSQL + Prisma** : base relationnelle solide (scans → photos → livres détectés → prix), Prisma génère des types TypeScript à partir du schéma et gère les migrations.
-- **Vision par Gemini Flash (défaut, le moins cher) ou Claude** (`VISION_PROVIDER`) : un seul appel par photo repère tous les livres, lit les tranches (même verticales ou abîmées) et renvoie un JSON validé (titre, auteur, éditeur, ISBN s'il est lisible, position du livre sur la photo).
+- **Vision par Gemini Flash (défaut), Claude ou un modèle open source via OpenRouter** (`VISION_PROVIDER`) : un seul appel par photo repère tous les livres, lit les tranches (même verticales ou abîmées) et renvoie un JSON validé (titre, auteur, éditeur, ISBN s'il est lisible, position du livre sur la photo).
 - **Google Books, puis la BnF, puis Open Library** : catalogues publics et gratuits pour retrouver l'ISBN, l'éditeur et la couverture à partir du titre lu. La BnF connaît presque tous les livres publiés en France et prend le relais quand Google sature.
 - **File d'attente** : la table `Scan` sert de file (statut `PENDING`). Le traitement démarre juste après l'envoi (`after()` de Next.js). Un filet de sécurité reprend les scans bloqués : la route `/api/cron` (Vercel Cron, toutes les 10 min) ou `npm run worker` sur un serveur classique. Pas besoin de Redis pour un usage perso ; on pourra passer à une vraie file (Inngest, BullMQ…) si le volume augmente.
 - **Stockage des photos** : dossier local en développement, S3 ou compatible (Cloudflare R2, Scaleway…) en production.
@@ -120,9 +120,11 @@ Toutes sont décrites dans [`.env.example`](.env.example).
 | `DATABASE_URL` | oui | Connexion PostgreSQL |
 | `AUTH_SECRET` | oui | Signature des sessions (32 caractères min.) |
 | `GEMINI_API_KEY` | oui pour les photos | Détection des livres par Gemini (clé sur [Google AI Studio](https://aistudio.google.com/apikey)) |
-| `VISION_PROVIDER` | non | `gemini` (défaut) ou `claude`. Vide : `gemini` si `GEMINI_API_KEY` existe, sinon `claude` si seule `ANTHROPIC_API_KEY` existe |
+| `VISION_PROVIDER` | non | `gemini` (défaut), `claude` ou `openrouter` (modèles open source). Vide : `gemini` si `GEMINI_API_KEY` existe, sinon `claude` si seule `ANTHROPIC_API_KEY` existe |
 | `GEMINI_MODEL` | non | Modèle Gemini (défaut `gemini-3.8-flash` ; `gemini-3.5-flash-lite` coûte moins mais lit moins bien) |
 | `GEMINI_THINKING` | non | Réflexion Gemini : `minimal`, `low`, `medium` ou `high` (vide = défaut du modèle) |
+| `OPENROUTER_API_KEY` | si `openrouter` | Clé [OpenRouter](https://openrouter.ai/settings/keys) : une seule clé pour les modèles open source |
+| `OPENROUTER_MODEL` | non | Modèle OpenRouter (défaut `qwen/qwen3-vl-235b-a22b-instruct` ; aussi `qwen/qwen3.8-27b`, `google/gemma-4-31b-it`) |
 | `ANTHROPIC_API_KEY` | si `claude` | Détection des livres par Claude |
 | `ANTHROPIC_MODEL` | non | Modèle Claude (défaut `claude-opus-5-5`) |
 | `ANTHROPIC_EFFORT` | non | Effort de réflexion pour la détection : `high` (défaut, plus précis), `medium` ou `low` (plus rapides) |
@@ -164,7 +166,9 @@ Points propres à Vercel :
 ```
 prisma/schema.prisma        schéma de la base
 src/lib/vision.ts           détection des livres (contours à 4 coins, sens de lecture), Claude ou Gemini
-src/lib/vision-gemini.ts    appel de l'API Gemini (sortie JSON structurée, réessais)
+src/lib/vision-gemini.ts    appel de l'API Gemini
+src/lib/vision-openrouter.ts  appel d'OpenRouter (Qwen, Gemma… open source)
+src/lib/vision-json.ts      schéma JSON, lecture et réessais communs
 src/lib/geometry.ts         contours, recouvrement, redressement des tranches
 src/components/BookPanels.tsx  boutons emplacement / historique / « … » d'un livre
 src/lib/report.ts           page HTML autonome de résultats

@@ -81,7 +81,7 @@ async function main() {
     detections = cleanDetections(raw.books, photo);
     notes.push(`Lecture de la photo rejouée depuis ${basename(values.detections)} (le modèle n'a pas été appelé).`);
   } else {
-    console.log(`Détection des livres avec ${env.visionProvider() === "claude" ? "Claude" : "Gemini"}…`);
+    console.log(`Détection des livres avec ${{ claude: "Claude", gemini: "Gemini", openrouter: "OpenRouter" }[env.visionProvider()]}…`);
     detections = await detectBooks(photo.data, { language: values.language!, mode: "shelf" });
     const saved = out.replace(/\.html$/, "") + "-lecture.json";
     const books = detections.map((d) => ({ ...d, polygon: undefined, bbox: undefined }));
