@@ -5,6 +5,7 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { env } from "./env";
 import { callGemini, GEMINI_SCALE } from "./vision-gemini";
+import { detectWithGoogleVision } from "./vision-google";
 import { toModelSize } from "./image";
 import { boxToQuad, iou, normalizeQuad, overlapOfSmaller, quadToBox, type NormalizedBox, type Point } from "./geometry";
 
@@ -365,6 +366,13 @@ export async function detectBooks(
 ): Promise<CleanDetection[]> {
   const meta = await sharp(jpeg).metadata();
   const size = { width: meta.width ?? 0, height: meta.height ?? 0 };
+  // Google Vision lit la photo entière en une fois : une seule unité facturée (1 000 gratuites par mois).
+  if (env.visionProvider() === "google-vision") {
+    const found = cleanDetections(await detectWithGoogleVision(jpeg, opts.language), size);
+    const books = opts.mode === "single" ? found.sort((a, b) => b.title.length - a.title.length).slice(0, 1) : readingOrder(found);
+    opts.onSure?.(books);
+    return books;
+  }
   if (opts.mode === "single") {
     // La photo gardée est plus grande que ce que lit le modèle : on la réduit (coordonnées dans l'image réduite).
     const small = await toModelSize(jpeg, size.width, size.height);
@@ -392,7 +400,7 @@ export async function detectBooks(
   );
   const all = tiles.length === 1 ? perTile[0] : mergeTiles(perTile);
   // Les rectangles droits de Gemini débordent souvent sur les livres voisins (Claude donne des coins inclinés).
-  if (env.visionProvider() !== "claude") tightenBoxes(all, size);
+  if (env.visionProvider() === "gemini") tightenBoxes(all, size);
   return all;
 }
 

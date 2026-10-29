@@ -29,12 +29,14 @@ export const env = {
    * Modèle qui lit les photos. VISION_PROVIDER l'emporte ; sinon Gemini (le moins cher) dès que GEMINI_API_KEY existe,
    * sinon Claude si seule ANTHROPIC_API_KEY existe (un déploiement sans clé Gemini continue donc de marcher).
    */
-  visionProvider: (): "gemini" | "claude" => {
+  visionProvider: (): "gemini" | "claude" | "google-vision" => {
     const p = process.env.VISION_PROVIDER?.toLowerCase();
-    if (p === "gemini" || p === "claude") return p;
+    if (p === "gemini" || p === "claude" || p === "google-vision") return p;
     return !process.env.GEMINI_API_KEY && process.env.ANTHROPIC_API_KEY ? "claude" : "gemini";
   },
   geminiApiKey: () => process.env.GEMINI_API_KEY,
+  /** Google Cloud Vision (VISION_PROVIDER=google-vision) ; à défaut, la clé Google Books si l'API Vision y est autorisée. */
+  googleVisionApiKey: () => process.env.GOOGLE_VISION_API_KEY || process.env.GOOGLE_BOOKS_API_KEY,
   geminiModel: () => process.env.GEMINI_MODEL || "gemini-3.8-flash",
   /** Recadrage des vignettes par un appel Gemini par livre (payant) : désactivé sauf REFINE_SPINES=true. */
   refineSpines: () => bool("REFINE_SPINES", false),
