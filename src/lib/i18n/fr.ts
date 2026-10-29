@@ -130,6 +130,7 @@ export const fr = {
     showOnPhoto: "Voir sur la photo",
     unidentified: "Non identifié",
     retry: "Relancer",
+    identifyingWaiting: "Identification de {n} livre(s) en cours… la page se met à jour toute seule.",
     pricesWaiting: "Récupération des prix pour {n} livre(s)… Amazon (Keepa) n'en donne qu'une vingtaine par minute : la page se met à jour toute seule.",
     refreshAllPrices: "Actualiser tous les prix",
     refreshingAllPrices: "Chargement des prix… (jusqu'à 1 min)",

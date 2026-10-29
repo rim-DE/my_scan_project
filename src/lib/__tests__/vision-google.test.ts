@@ -56,6 +56,11 @@ describe("Google Vision : mots regroupés en tranches", () => {
     expect(books[0].text_direction).toBe("left_to_right");
   });
 
+  it("ignore les tranches où il n'y a que des chiffres ou des lettres isolées", () => {
+    const books = groupSpines([up("2014", 100, 30, 200, 300), up("J'ai", 300, 30, 200, 300), up("Lu", 300, 30, 310, 360), up("Reine", 500, 30, 200, 330)]);
+    expect(books.map((b) => b.title)).toEqual(["Reine"]);
+  });
+
   it("lit la réponse de l'API (mots et positions)", () => {
     const pieces = parseVisionResponse({
       responses: [

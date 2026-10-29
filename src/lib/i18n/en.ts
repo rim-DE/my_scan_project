@@ -131,6 +131,7 @@ export const en: Dict = {
     showOnPhoto: "Show on photo",
     unidentified: "Not identified",
     retry: "Retry",
+    identifyingWaiting: "Identifying {n} book(s)… the page updates on its own.",
     pricesWaiting: "Fetching prices for {n} book(s)… Amazon (Keepa) only allows about twenty per minute: the page updates on its own.",
     refreshAllPrices: "Refresh all prices",
     refreshingAllPrices: "Loading prices… (up to 1 min)",

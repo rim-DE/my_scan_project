@@ -29,6 +29,8 @@ export default async function ScanPage({ params }: { params: Promise<{ id: strin
   const { scan, detections } = view;
   const lists = await prisma.shoppingList.findMany({ where: { userId: user.id }, select: { id: true, name: true } });
   const running = scan.status === "PENDING" || scan.status === "PROCESSING";
+  // Analyse coupée en route (fonction Vercel arrêtée au bout de 5 min) : on propose de la relancer.
+  const stuck = scan.status === "PROCESSING" && !!scan.startedAt && Date.now() - scan.startedAt.getTime() > 15 * 60_000;
   const missing = detections.filter((d) => !d.book && d.rawTitle).length;
   const waitingPrices = new Set(detections.flatMap((d) => (d.book?.priceStatus === "waiting" ? [d.book.id] : []))).size;
   // Livres pas encore trouvés ou prix pas encore récupérés (ex. jetons Keepa épuisés pendant le scan) : en tâche de fond.
@@ -72,6 +74,19 @@ export default async function ScanPage({ params }: { params: Promise<{ id: strin
           <span className="h-4 w-4 animate-spin rounded-full border-2 border-brand border-t-transparent" />
           {t.scan.processing}
           <AutoRefresh scanId={scan.id} status={scan.status} detections={detections.length} />
+          {stuck && (
+            <form action={retryScanAction.bind(null, scan.id)}>
+              <button className="btn-outline">{t.scan.retry}</button>
+            </form>
+          )}
+        </div>
+      )}
+
+      {!running && retryable > 0 && waitingPrices === 0 && (
+        <div className="card flex items-center gap-3 text-sm">
+          <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-brand border-t-transparent" />
+          {fmt(t.scan.identifyingWaiting, { n: retryable })}
+          <PricesAutoRefresh />
         </div>
       )}
 

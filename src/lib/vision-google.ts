@@ -103,6 +103,9 @@ export function groupSpines(pieces: TextPiece[]): DetectedBook[] {
     const others = lines.filter((l) => lineThick(l) < 0.75 * big).sort((a, b) => lineThick(b) - lineThick(a));
     const author = others.find((l) => AUTHOR_LIKE.test(lineText(l)));
     const publisher = others.find((l) => l !== author);
+    // Bouts de texte isolés (lettres, chiffres, logo d'éditeur) : rien à chercher, et chaque recherche a un coût.
+    const title = titleLines.map(lineText).join(" ");
+    if (letters(title) < 4 || !/\p{L}{3}/u.test(title)) continue;
     const directions = titleLines.flat().map((p) => p.direction);
     const direction = directions.sort((a, b) => directions.filter((d) => d === b).length - directions.filter((d) => d === a).length)[0];
     // La tranche est plus large que ses lignes de texte : on élargit un peu le rectangle autour du texte.
@@ -114,7 +117,7 @@ export function groupSpines(pieces: TextPiece[]): DetectedBook[] {
     const conf = g.reduce((s, p) => s + p.confidence, 0) / g.length;
     books.push({
       shelf: 1,
-      title: titleLines.map(lineText).join(" "),
+      title,
       author: author ? lineText(author) : null,
       publisher: publisher ? lineText(publisher) : null,
       isbn: null,
