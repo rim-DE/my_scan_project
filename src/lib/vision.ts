@@ -181,7 +181,8 @@ const sameRow = (a: Span, b: Span) => Math.min(a.l1, b.l1) - Math.max(a.l0, b.l0
 
 /**
  * Resserre les rectangles droits (Gemini) pour qu'une vignette ne montre qu'un livre :
- * - un rectangle bien plus épais que ses voisins d'étagère est ramené à la place que les autres livres lui laissent ;
+ * - un rectangle bien plus épais que ses voisins d'étagère est ramené à la place que les autres livres lui laissent,
+ *   si cette place a la taille d'un seul livre (sinon il reste tel quel : mieux vaut trop large que le voisin) ;
  * - deux rectangles voisins qui se chevauchent un peu sont coupés au milieu du chevauchement.
  * Modifie les livres sur place (le traitement du scan les reconnaît à leur identité).
  */
@@ -213,12 +214,10 @@ export function tightenBoxes(books: CleanDetection[], size: { width: number; hei
           if (o.t0 > cursor && (!free || o.t0 - cursor > free[1] - free[0])) free = [cursor, Math.min(o.t0, s.t1)];
           cursor = Math.max(cursor, o.t1);
         }
-        if (free && free[1] - free[0] >= 0.5 * median) [s.t0, s.t1] = free;
-        else {
-          // Les voisins couvrent tout : on garde une épaisseur normale au centre.
-          const c = (s.t0 + s.t1) / 2;
-          [s.t0, s.t1] = [c - median / 2, c + median / 2];
-        }
+        // Seulement si la place libre a la taille d'UN livre : sinon on ne sait pas lequel est le bon,
+        // et deviner (le milieu, un morceau trop large) montrerait souvent la tranche du voisin.
+        const width = free ? free[1] - free[0] : 0;
+        if (free && width >= 0.5 * median && width <= FAT_FACTOR * median) [s.t0, s.t1] = free;
       }
     }
     // 2. Petits chevauchements entre voisins : on coupe au milieu.

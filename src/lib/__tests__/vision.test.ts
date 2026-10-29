@@ -161,3 +161,32 @@ describe("tightenBoxes", () => {
     expect([b.x, b.y, b.w, b.h].map((v) => Math.round(v * 1000) / 1000)).toEqual([0.2, 0.1, 0.1, 0.3]);
   });
 });
+
+describe("tightenBoxes sans deviner", () => {
+  const size = { width: 1000, height: 1000 };
+  const book = (title: string, x: number, w: number): CleanDetection => ({
+    shelf: 1,
+    title,
+    author: null,
+    publisher: null,
+    isbn: null,
+    corners: [],
+    text_direction: "bottom_to_top",
+    confidence: "high",
+    bbox: { x, y: 0.1, w, h: 0.3 },
+    polygon: null,
+  });
+
+  it("laisse tel quel un gros rectangle entièrement couvert par ses voisins (pas de livre du milieu)", () => {
+    const books = [book("A", 0.1, 0.02), book("B", 0.12, 0.02), book("C", 0.14, 0.02), book("Gros", 0.1, 0.06), book("D", 0.3, 0.02)];
+    tightenBoxes(books, size);
+    expect(books[3].bbox!.x).toBeCloseTo(0.1);
+    expect(books[3].bbox!.w).toBeCloseTo(0.06);
+  });
+
+  it("laisse tel quel un gros rectangle quand la place libre est trop large pour un seul livre", () => {
+    const books = [book("A", 0.1, 0.02), book("Gros", 0.1, 0.12), book("C", 0.3, 0.02), book("D", 0.4, 0.02)];
+    tightenBoxes(books, size);
+    expect(books[1].bbox!.w).toBeCloseTo(0.12);
+  });
+});
