@@ -6,7 +6,7 @@ import { z } from "zod";
 import { env } from "./env";
 import { callGemini, GEMINI_SCALE } from "./vision-gemini";
 import { toModelSize } from "./image";
-import { iou, normalizeQuad, overlapOfSmaller, quadToBox, type NormalizedBox, type Point } from "./geometry";
+import { boxToQuad, iou, normalizeQuad, overlapOfSmaller, quadToBox, type NormalizedBox, type Point } from "./geometry";
 
 export type { NormalizedBox } from "./geometry";
 
@@ -163,6 +163,82 @@ export function mergeTiles(perTile: CleanDetection[][]): CleanDetection[] {
   return readingOrder(kept.map((k) => k.b));
 }
 
+/** Un rectangle plus de 2,5 fois plus épais que les autres livres de son étagère couvre sûrement plusieurs livres. */
+const FAT_FACTOR = 2.5;
+
+interface Span {
+  b: CleanDetection;
+  /** Tranche debout : son épaisseur se mesure en largeur ; livre couché : en hauteur. */
+  upright: boolean;
+  /** Épaisseur [t0, t1] et longueur [l0, l1], en pixels de la photo. */
+  t0: number;
+  t1: number;
+  l0: number;
+  l1: number;
+}
+
+const sameRow = (a: Span, b: Span) => Math.min(a.l1, b.l1) - Math.max(a.l0, b.l0) > 0.5 * Math.min(a.l1 - a.l0, b.l1 - b.l0);
+
+/**
+ * Resserre les rectangles droits (Gemini) pour qu'une vignette ne montre qu'un livre :
+ * - un rectangle bien plus épais que ses voisins d'étagère est ramené à la place que les autres livres lui laissent ;
+ * - deux rectangles voisins qui se chevauchent un peu sont coupés au milieu du chevauchement.
+ * Modifie les livres sur place (le traitement du scan les reconnaît à leur identité).
+ */
+export function tightenBoxes(books: CleanDetection[], size: { width: number; height: number }): void {
+  const { width: W, height: H } = size;
+  const spans: Span[] = books.flatMap((b) => {
+    if (!b.bbox) return [];
+    const [x0, x1, y0, y1] = [b.bbox.x * W, (b.bbox.x + b.bbox.w) * W, b.bbox.y * H, (b.bbox.y + b.bbox.h) * H];
+    const upright = y1 - y0 >= x1 - x0;
+    return [upright ? { b, upright, t0: x0, t1: x1, l0: y0, l1: y1 } : { b, upright, t0: y0, t1: y1, l0: x0, l1: x1 }];
+  });
+  const groups = new Map<string, Span[]>();
+  for (const s of spans) {
+    const key = `${s.b.shelf}|${s.upright}`;
+    groups.set(key, [...(groups.get(key) ?? []), s]);
+  }
+  for (const group of groups.values()) {
+    const thick = [...group.map((s) => s.t1 - s.t0)].sort((a, b) => a - b);
+    const median = thick[Math.floor(thick.length / 2)];
+    // 1. Rectangles trop épais : on garde le plus grand morceau que les livres voisins ne couvrent pas.
+    if (group.length >= 3) {
+      for (const s of group) {
+        if (s.t1 - s.t0 <= FAT_FACTOR * median) continue;
+        const others = group.filter((o) => o !== s && sameRow(o, s) && o.t1 > s.t0 && o.t0 < s.t1).sort((a, b) => a.t0 - b.t0);
+        if (others.length === 0) continue;
+        let free: [number, number] | null = null;
+        let cursor = s.t0;
+        for (const o of [...others, { t0: s.t1, t1: s.t1 }]) {
+          if (o.t0 > cursor && (!free || o.t0 - cursor > free[1] - free[0])) free = [cursor, Math.min(o.t0, s.t1)];
+          cursor = Math.max(cursor, o.t1);
+        }
+        if (free && free[1] - free[0] >= 0.5 * median) [s.t0, s.t1] = free;
+        else {
+          // Les voisins couvrent tout : on garde une épaisseur normale au centre.
+          const c = (s.t0 + s.t1) / 2;
+          [s.t0, s.t1] = [c - median / 2, c + median / 2];
+        }
+      }
+    }
+    // 2. Petits chevauchements entre voisins : on coupe au milieu.
+    const sorted = [...group].sort((a, b) => a.t0 - b.t0);
+    for (let i = 0; i + 1 < sorted.length; i++) {
+      const [a, b] = [sorted[i], sorted[i + 1]];
+      const overlap = a.t1 - b.t0;
+      if (overlap <= 0 || !sameRow(a, b) || overlap >= 0.5 * Math.min(a.t1 - a.t0, b.t1 - b.t0)) continue;
+      const cut = (a.t1 + b.t0) / 2;
+      a.t1 = cut;
+      b.t0 = cut;
+    }
+  }
+  for (const s of spans) {
+    const [x0, x1, y0, y1] = s.upright ? [s.t0, s.t1, s.l0, s.l1] : [s.l0, s.l1, s.t0, s.t1];
+    s.b.bbox = { x: x0 / W, y: y0 / H, w: (x1 - x0) / W, h: (y1 - y0) / H };
+    s.b.polygon = boxToQuad(s.b.bbox);
+  }
+}
+
 const words = (b: DetectedBook) =>
   new Set(`${b.title} ${b.author ?? ""}`.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").split(/[^a-z0-9]+/).filter((w) => w.length >= 3));
 
@@ -219,7 +295,9 @@ const shapeLine = (f: Frame) =>
   f.normalized
     ? `- "box_2d" : le rectangle qui entoure la tranche (ou la couverture si le livre est vu de face) : [ymin, xmin, ymax, xmax],
   chaque valeur de 0 à 1000 (0 = haut ou gauche de l'image, 1000 = bas ou droite). Colle aux bords réels de la tranche,
-  sans déborder sur les livres voisins ;`
+  sans déborder sur les livres voisins. Un rectangle = UN SEUL livre : dans une pile de livres couchés, chaque livre a
+  son propre rectangle, fin, de l'épaisseur de sa seule tranche ; ne regroupe jamais plusieurs livres dans un rectangle.
+  Pour un livre penché, donne le plus petit rectangle qui contient sa tranche ;`
     : `- "corners" : les 4 coins de la tranche (ou de la couverture si le livre est vu de face), tels qu'ils sont sur la photo,
   dans l'ordre haut-gauche, haut-droit, bas-droit, bas-gauche. ${frameLines(f).coords}. Si le livre est penché, les coins suivent son inclinaison : la forme n'est pas
   forcément un rectangle droit. Colle aux bords réels de la tranche, sans déborder sur les livres voisins ;`;
@@ -313,7 +391,10 @@ export async function detectBooks(
       return clean;
     }),
   );
-  return tiles.length === 1 ? perTile[0] : mergeTiles(perTile);
+  const all = tiles.length === 1 ? perTile[0] : mergeTiles(perTile);
+  // Les rectangles droits de Gemini débordent souvent sur les livres voisins (Claude donne des coins inclinés).
+  if (env.visionProvider() !== "claude") tightenBoxes(all, size);
+  return all;
 }
 
 /**
