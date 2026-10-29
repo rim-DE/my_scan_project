@@ -1,15 +1,16 @@
 // Teste la chaîne complète sur une photo, sans base de données, et produit une page HTML autonome.
 //
-//   npm run scan:report -- etagere.jpg                       (détection Claude + catalogues + prix configurés)
+//   npm run scan:report -- etagere.jpg                       (détection Gemini ou Claude + catalogues + prix configurés)
 //   npm run scan:report -- etagere.jpg --out resultat.html
-//   npm run scan:report -- etagere.jpg --detections lecture.json   (rejoue une lecture déjà faite, sans appeler Claude)
+//   npm run scan:report -- etagere.jpg --detections lecture.json   (rejoue une lecture déjà faite, sans appeler le modèle)
 //   npm run scan:report -- etagere.jpg --demo                (prix de démonstration, FAUX, pour voir la mise en page)
 //
-// Le fichier --detections suit le format renvoyé par Claude : { "books": [...] }, coins en pixels de la photo
+// Le fichier --detections suit le format renvoyé par le modèle : { "books": [...] }, coins en pixels de la photo
 // réduite (voir normalizePhoto). La commande écrit aussi ce fichier à côté de la page à chaque vraie détection.
 import { readFile, writeFile } from "node:fs/promises";
 import { basename } from "node:path";
 import { parseArgs } from "node:util";
+import { env } from "../src/lib/env";
 import { normalizePhoto } from "../src/lib/image";
 import { cleanDetections, detectBooks, DetectionResultSchema, type CleanDetection } from "../src/lib/vision";
 import { lookupByIsbn, lookupByTitle, type BookInfo } from "../src/lib/books";
@@ -78,9 +79,9 @@ async function main() {
   if (values.detections) {
     const raw = DetectionResultSchema.parse(JSON.parse(await readFile(values.detections, "utf8")));
     detections = cleanDetections(raw.books, photo);
-    notes.push(`Lecture de la photo rejouée depuis ${basename(values.detections)} (Claude n'a pas été appelé).`);
+    notes.push(`Lecture de la photo rejouée depuis ${basename(values.detections)} (le modèle n'a pas été appelé).`);
   } else {
-    console.log("Détection des livres avec Claude…");
+    console.log(`Détection des livres avec ${env.visionProvider() === "claude" ? "Claude" : "Gemini"}…`);
     detections = await detectBooks(photo.data, { language: values.language!, mode: "shelf" });
     const saved = out.replace(/\.html$/, "") + "-lecture.json";
     const books = detections.map((d) => ({ ...d, polygon: undefined, bbox: undefined }));

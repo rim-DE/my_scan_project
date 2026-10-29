@@ -1,9 +1,10 @@
-// Détection des livres sur une photo avec l'API Claude (vision + sortie JSON structurée).
+// Détection des livres sur une photo par un modèle de vision (Gemini par défaut, ou Claude), en sortie JSON structurée.
 import Anthropic from "@anthropic-ai/sdk";
 import sharp from "sharp";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { env } from "./env";
+import { callGemini, GEMINI_SCALE } from "./vision-gemini";
 import { toModelSize } from "./image";
 import { iou, normalizeQuad, overlapOfSmaller, quadToBox, type NormalizedBox, type Point } from "./geometry";
 
@@ -19,7 +20,7 @@ export const DetectedBookSchema = z.object({
   corners: z
     .array(CornerSchema)
     .describe(
-      "Les 4 coins de la tranche (ou de la couverture) tels qu'ils apparaissent sur la photo, en suivant l'inclinaison du livre. Coordonnées en pixels de l'image",
+      "Les 4 coins de la tranche (ou de la couverture) tels qu'ils apparaissent sur la photo, en suivant l'inclinaison du livre, dans le repère de coordonnées indiqué par la consigne",
     ),
   text_direction: z
     .enum(["bottom_to_top", "top_to_bottom", "left_to_right", "right_to_left"])
@@ -142,13 +143,34 @@ const LANGUAGE_NAMES: Record<string, string> = {
   it: "italien",
 };
 
-const SHELF_PROMPT = (language: string, w: number, h: number) => `Tu analyses la photo d'une ou plusieurs étagères ou piles de livres.
+/**
+ * Repère des coordonnées demandé au modèle. Claude donne des pixels ; Gemini est entraîné à donner des positions
+ * ramenées de 0 à 1000 sur chaque axe, quelle que soit la taille de l'image : il y est bien plus précis.
+ */
+interface Frame {
+  w: number;
+  h: number;
+  normalized: boolean;
+}
+
+const frameLines = (f: Frame) =>
+  f.normalized
+    ? {
+        size: `Les coordonnées sont normalisées de 0 à ${f.w} sur chaque axe, quelle que soit la taille réelle de l'image.`,
+        coords: `Coordonnées normalisées (0,0 = coin haut gauche, ${f.w},${f.h} = coin bas droit de l'image)`,
+      }
+    : {
+        size: `L'image fait ${f.w} × ${f.h} pixels.`,
+        coords: `Coordonnées en pixels (0,0 = coin haut gauche, ${f.w},${f.h} = coin bas droit de l'image)`,
+      };
+
+const SHELF_PROMPT = (language: string, f: Frame) => `Tu analyses la photo d'une ou plusieurs étagères ou piles de livres.
 Sois EXHAUSTIF : repère chaque livre dont on peut lire au moins un mot sur la tranche ou la couverture (titre, auteur ou éditeur),
 y compris les livres fins, penchés, couchés à plat, sur un meuble voisin ou coupés par le bord de la photo.
 Deux tranches voisines de la même couleur sont deux livres distincts : sépare-les dès que le texte, la police, l'éditeur
 ou le sens de lecture change, et ne réunis jamais deux livres dans une même forme.
 Les livres sont majoritairement en ${LANGUAGE_NAMES[language] ?? language}.
-L'image fait ${w} × ${h} pixels.
+${frameLines(f).size}
 
 Pour chaque livre :
 - "title" : le titre complet tel que tu le lis, y compris les petits mots écrits au-dessus ou à côté du mot principal
@@ -159,8 +181,7 @@ Pour chaque livre :
   écrit plus petit que le titre ;
 - "isbn" : uniquement s'il est réellement lisible, sinon null (n'invente jamais d'ISBN) ;
 - "corners" : les 4 coins de la tranche (ou de la couverture si le livre est vu de face), tels qu'ils sont sur la photo,
-  dans l'ordre haut-gauche, haut-droit, bas-droit, bas-gauche. Coordonnées en pixels (0,0 = coin haut gauche,
-  ${w},${h} = coin bas droit de l'image). Si le livre est penché, les coins suivent son inclinaison : la forme n'est pas
+  dans l'ordre haut-gauche, haut-droit, bas-droit, bas-gauche. ${frameLines(f).coords}. Si le livre est penché, les coins suivent son inclinaison : la forme n'est pas
   forcément un rectangle droit. Colle aux bords réels de la tranche, sans déborder sur les livres voisins ;
 - "text_direction" : sens de lecture du titre sur la photo : "bottom_to_top" (de bas en haut), "top_to_bottom" (de haut
   en bas), "left_to_right" (horizontal, à l'endroit, y compris une étiquette horizontale sur une tranche debout)
@@ -169,10 +190,10 @@ Pour chaque livre :
 
 Ignore les livres dont aucun texte n'est lisible. Liste-les de gauche à droite, étagère par étagère, de haut en bas.`;
 
-const SINGLE_PROMPT = (w: number, h: number) => `Cette photo montre un seul livre (couverture, dos ou code-barres).
+const SINGLE_PROMPT = (f: Frame) => `Cette photo montre un seul livre (couverture, dos ou code-barres).
 Lis le titre, l'auteur, l'éditeur et l'ISBN s'il est visible (souvent sous le code-barres, commence par 978 ou 979).
 Retourne exactement un élément dans "books" (ou aucun si ce n'est pas un livre).
-Pour "corners", donne les 4 coins du livre en pixels (l'image fait ${w} × ${h} pixels), ordre haut-gauche, haut-droit, bas-droit, bas-gauche.`;
+Pour "corners", donne les 4 coins du livre, ordre haut-gauche, haut-droit, bas-droit, bas-gauche. ${frameLines(f).coords}.`;
 
 let client: Anthropic | null = null;
 function anthropic(): Anthropic {
@@ -191,7 +212,7 @@ export async function detectBooks(
   if (opts.mode === "single") {
     // La photo gardée est plus grande que ce que lit le modèle : on la réduit (coordonnées dans l'image réduite).
     const small = await toModelSize(jpeg, size.width, size.height);
-    const books = await callModel(small.data, SINGLE_PROMPT(small.width, small.height));
+    const books = await callModel(small, (f) => SINGLE_PROMPT(f));
     return cleanDetections(books, small);
   }
   const tiles = tileLayout(size.width, size.height);
@@ -203,7 +224,7 @@ export async function detectBooks(
           : await sharp(jpeg).extract({ left: tile.left, top: 0, width: tile.width, height: size.height }).jpeg({ quality: 90 }).toBuffer();
       // Chaque bande est réduite à la taille maximale lue par le modèle.
       const image = await toModelSize(crop, tile.width, size.height);
-      const books = await callModel(image.data, SHELF_PROMPT(opts.language, image.width, image.height));
+      const books = await callModel(image, (f) => SHELF_PROMPT(opts.language, f));
       // Coordonnées de la bande réduite -> coordonnées de la photo entière.
       const sx = tile.width / image.width;
       const sy = size.height / image.height;
@@ -214,7 +235,28 @@ export async function detectBooks(
   return tiles.length === 1 ? perTile[0] : mergeTiles(perTile);
 }
 
-async function callModel(jpeg: Buffer, prompt: string): Promise<DetectedBook[]> {
+/**
+ * Envoie l'image au fournisseur choisi (VISION_PROVIDER) et renvoie les livres avec leurs coins en pixels de cette image.
+ */
+async function callModel(
+  image: { data: Buffer; width: number; height: number },
+  prompt: (f: Frame) => string,
+): Promise<DetectedBook[]> {
+  if (env.visionProvider() === "claude") {
+    return callClaude(image.data, prompt({ w: image.width, h: image.height, normalized: false }));
+  }
+  const { books } = await callGemini(
+    image.data,
+    prompt({ w: GEMINI_SCALE, h: GEMINI_SCALE, normalized: true }),
+    DetectionResultSchema,
+  );
+  // Repère 0-1000 -> pixels de l'image envoyée.
+  const sx = image.width / GEMINI_SCALE;
+  const sy = image.height / GEMINI_SCALE;
+  return books.map((b) => ({ ...b, corners: b.corners.map((c) => ({ x: Math.round(c.x * sx), y: Math.round(c.y * sy) })) }));
+}
+
+async function callClaude(jpeg: Buffer, prompt: string): Promise<DetectedBook[]> {
   // Une étagère pleine peut contenir plus de 100 livres : on laisse de la place à la réponse
   // et on passe en streaming, obligatoire pour les réponses longues.
   const stream = anthropic().messages.stream({

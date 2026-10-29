@@ -23,7 +23,7 @@ Pas encore inclus : Tarifs, Guide, Contact (prévus plus tard), application mobi
 
 - **Next.js 15 + TypeScript + Tailwind CSS** : un seul projet pour l'interface et le serveur (routes API, actions serveur), typé de bout en bout, et déployable en un clic sur Vercel. La même base servira plus tard d'API pour une appli mobile.
 - **PostgreSQL + Prisma** : base relationnelle solide (scans → photos → livres détectés → prix), Prisma génère des types TypeScript à partir du schéma et gère les migrations.
-- **API Claude (vision)** : un seul appel par photo repère tous les livres, lit les tranches (même verticales ou abîmées) et renvoie un JSON validé (titre, auteur, éditeur, ISBN s'il est lisible, position du livre sur la photo).
+- **Vision par Gemini Flash (défaut, le moins cher) ou Claude** (`VISION_PROVIDER`) : un seul appel par photo repère tous les livres, lit les tranches (même verticales ou abîmées) et renvoie un JSON validé (titre, auteur, éditeur, ISBN s'il est lisible, position du livre sur la photo).
 - **Google Books, puis la BnF, puis Open Library** : catalogues publics et gratuits pour retrouver l'ISBN, l'éditeur et la couverture à partir du titre lu. La BnF connaît presque tous les livres publiés en France et prend le relais quand Google sature.
 - **File d'attente** : la table `Scan` sert de file (statut `PENDING`). Le traitement démarre juste après l'envoi (`after()` de Next.js). Un filet de sécurité reprend les scans bloqués : la route `/api/cron` (Vercel Cron, toutes les 10 min) ou `npm run worker` sur un serveur classique. Pas besoin de Redis pour un usage perso ; on pourra passer à une vraie file (Inngest, BullMQ…) si le volume augmente.
 - **Stockage des photos** : dossier local en développement, S3 ou compatible (Cloudflare R2, Scaleway…) en production.
@@ -75,7 +75,7 @@ docker compose up -d
 
 # 3. Configurer
 cp .env.example .env
-# puis ouvre .env et remplis au minimum AUTH_SECRET et ANTHROPIC_API_KEY
+# puis ouvre .env et remplis au minimum AUTH_SECRET et GEMINI_API_KEY
 # (AUTH_SECRET : colle le résultat de `openssl rand -base64 32`)
 
 # 4. Créer les tables
@@ -104,9 +104,9 @@ Test manuel conseillé :
 ### Tester la détection sur une photo, sans base de données
 
 ```bash
-npm run scan:report -- etagere.jpg                  # Claude + catalogues + sources de prix configurées
+npm run scan:report -- etagere.jpg                  # Gemini/Claude + catalogues + sources de prix configurées
 npm run scan:report -- etagere.jpg --demo           # idem avec des prix de démonstration (faux)
-npm run scan:report -- etagere.jpg --detections etagere-resultat-lecture.json   # rejoue une lecture sans rappeler Claude
+npm run scan:report -- etagere.jpg --detections etagere-resultat-lecture.json   # rejoue une lecture sans rappeler le modèle
 ```
 
 La commande écrit une page HTML autonome (photo comprise) avec la même mise en page que la page de résultats : contours sur la photo, tranches redressées, statistiques, les trois boutons de chaque livre, tris, export. Chaque vraie détection est aussi enregistrée en JSON pour pouvoir la rejouer gratuitement.
@@ -119,7 +119,11 @@ Toutes sont décrites dans [`.env.example`](.env.example).
 | --- | --- | --- |
 | `DATABASE_URL` | oui | Connexion PostgreSQL |
 | `AUTH_SECRET` | oui | Signature des sessions (32 caractères min.) |
-| `ANTHROPIC_API_KEY` | oui pour les photos | Détection des livres par Claude |
+| `GEMINI_API_KEY` | oui pour les photos | Détection des livres par Gemini (clé sur [Google AI Studio](https://aistudio.google.com/apikey)) |
+| `VISION_PROVIDER` | non | `gemini` (défaut) ou `claude`. Vide : `gemini` si `GEMINI_API_KEY` existe, sinon `claude` si seule `ANTHROPIC_API_KEY` existe |
+| `GEMINI_MODEL` | non | Modèle Gemini (défaut `gemini-3.8-flash` ; `gemini-3.5-flash-lite` coûte moins mais lit moins bien) |
+| `GEMINI_THINKING` | non | Réflexion Gemini : `minimal`, `low`, `medium` ou `high` (vide = défaut du modèle) |
+| `ANTHROPIC_API_KEY` | si `claude` | Détection des livres par Claude |
 | `ANTHROPIC_MODEL` | non | Modèle Claude (défaut `claude-opus-5-5`) |
 | `ANTHROPIC_EFFORT` | non | Effort de réflexion pour la détection : `high` (défaut, plus précis), `medium` ou `low` (plus rapides) |
 | `GOOGLE_BOOKS_API_KEY` | conseillé | Évite le quota partagé de Google Books |
@@ -141,7 +145,7 @@ Toutes sont décrites dans [`.env.example`](.env.example).
 **Vercel** (hébergement) + **Neon** (PostgreSQL gratuit) + **Vercel Blob** (photos, 1 Go gratuit).
 
 1. **Neon** : crée un projet (région Europe). Dans « Connect », désactive *Connection pooling* puis copie l'adresse dans `DATABASE_URL` (les migrations Prisma ont besoin d'une connexion directe).
-2. **Vercel** : importe le dépôt GitHub, ajoute les variables d'environnement (`DATABASE_URL`, `AUTH_SECRET`, `ANTHROPIC_API_KEY`, `CRON_SECRET`, et si tu les as `GOOGLE_BOOKS_API_KEY`, `EBAY_*`, `KEEPA_API_KEY`), puis déploie. Pour `AUTH_SECRET` et `CRON_SECRET` : `openssl rand -base64 32`.
+2. **Vercel** : importe le dépôt GitHub, ajoute les variables d'environnement (`DATABASE_URL`, `AUTH_SECRET`, `GEMINI_API_KEY`, `CRON_SECRET`, et si tu les as `GOOGLE_BOOKS_API_KEY`, `EBAY_*`, `KEEPA_API_KEY`), puis déploie. Pour `AUTH_SECRET` et `CRON_SECRET` : `openssl rand -base64 32`.
 3. **Photos** : dans le projet Vercel, onglet *Storage* → *Create* → *Blob*, accès **Private**, relié au projet. Vercel ajoute tout seul `BLOB_STORE_ID` (connexion OIDC) ou `BLOB_READ_WRITE_TOKEN`, et l'appli utilise Blob dès que l'un des deux est présent. Redéploie ensuite (*Deployments* → *Redeploy*). Sur Vercel le disque n'est pas permanent : le stockage local ne marche pas.
 4. Ouvre l'adresse donnée par Vercel et crée ton compte (le premier compte peut toujours s'inscrire).
 
@@ -159,7 +163,8 @@ Points propres à Vercel :
 
 ```
 prisma/schema.prisma        schéma de la base
-src/lib/vision.ts           détection des livres par Claude (contours à 4 coins, sens de lecture)
+src/lib/vision.ts           détection des livres (contours à 4 coins, sens de lecture), Claude ou Gemini
+src/lib/vision-gemini.ts    appel de l'API Gemini (sortie JSON structurée, réessais)
 src/lib/geometry.ts         contours, recouvrement, redressement des tranches
 src/components/BookPanels.tsx  boutons emplacement / historique / « … » d'un livre
 src/lib/report.ts           page HTML autonome de résultats
