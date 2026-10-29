@@ -9,7 +9,7 @@ import { getScanView } from "@/lib/queries";
 import { identifyMissingAction, refreshScanPricesAction, retryScanAction } from "@/app/actions";
 import { StatusBadge } from "@/components/StatusBadge";
 import { AutoRefresh, PricesAutoRefresh } from "@/components/AutoRefresh";
-import { fillMissingPrices } from "@/lib/prices/fill";
+import { fillMissingPrices, retryableDetections } from "@/lib/prices/fill";
 import { refineSpines } from "@/lib/refine";
 import { ScanViewer } from "@/components/ScanViewer";
 import { ScanActionButton } from "@/components/ScanActionButton";
@@ -31,8 +31,9 @@ export default async function ScanPage({ params }: { params: Promise<{ id: strin
   const running = scan.status === "PENDING" || scan.status === "PROCESSING";
   const missing = detections.filter((d) => !d.book && d.rawTitle).length;
   const waitingPrices = new Set(detections.flatMap((d) => (d.book?.priceStatus === "waiting" ? [d.book.id] : []))).size;
-  // Prix pas encore récupérés (ex. jetons Keepa épuisés pendant le scan) : on les récupère en tâche de fond.
-  if (!running && waitingPrices > 0) after(() => fillMissingPrices(scan.id).catch((e) => console.warn("[prix] récupération", e)));
+  // Livres pas encore trouvés ou prix pas encore récupérés (ex. jetons Keepa épuisés pendant le scan) : en tâche de fond.
+  const retryable = running ? 0 : (await retryableDetections(scan.id)).length;
+  if (!running && (waitingPrices > 0 || retryable > 0)) after(() => fillMissingPrices(scan.id).catch((e) => console.warn("[prix] récupération", e)));
   // Tous les prix sont là : on recadre les vignettes des meilleurs livres qui ne l'ont pas encore été.
   if (!running && waitingPrices === 0 && detections.length > 0) after(() => refineSpines(scan.id).catch((e) => console.warn("[vignettes]", e)));
 

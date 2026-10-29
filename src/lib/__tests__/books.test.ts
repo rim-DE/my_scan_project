@@ -133,6 +133,18 @@ describe("recherche par titre quand Google Books sature", () => {
     await vi.runAllTimersAsync();
     await check;
   });
+
+  it("ne renvoie pas « introuvable » quand la recherche Amazon manque de jetons Keepa", async () => {
+    vi.stubEnv("KEEPA_API_KEY", "test");
+    // Les catalogues gratuits ne trouvent rien, et Keepa n'a plus de jetons (429).
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: URL) => (String(url).includes("keepa") ? json({ refillIn: 1000 }, 429) : json({ docs: [] }))),
+    );
+    // Keepa est réessayé une fois après 1 s (vraie attente : l'appel Keepa est chargé à la demande).
+    await expect(lookupByTitle({ title: "Atlas zoologique", language: "fr" })).rejects.toBeInstanceOf(CatalogUnavailableError);
+    vi.unstubAllEnvs();
+  });
 });
 
 describe("catalogue de la BnF", () => {
