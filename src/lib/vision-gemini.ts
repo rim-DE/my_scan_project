@@ -54,8 +54,9 @@ export async function callGemini<T>(jpeg: Buffer | null, prompt: string, schema:
     generationConfig: {
       responseMimeType: "application/json",
       responseJsonSchema: geminiSchema(schema),
-      // Une étagère pleine peut contenir plus de 100 livres : on laisse de la place à la réponse.
-      maxOutputTokens: 65536,
+      // Une bande d'étagère (plus de 100 livres) tient dans ~15 000 jetons, réflexion comprise. Au-delà, le modèle
+      // tourne en rond : on l'arrête avant qu'une seule photo coûte des dizaines de centimes. Texte seul : réponse courte.
+      maxOutputTokens: jpeg ? 24_576 : 4096,
       ...(thinking ? { thinkingConfig: { thinkingLevel: thinking } } : {}),
     },
   });

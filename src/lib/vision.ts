@@ -303,8 +303,7 @@ const shapeLine = (f: Frame) =>
 
 const SHELF_PROMPT = (language: string, f: Frame) => `Tu analyses la photo d'une ou plusieurs étagères ou piles de livres.
 Sois EXHAUSTIF : repère chaque livre dont on peut lire au moins un mot sur la tranche ou la couverture (titre, auteur ou éditeur),
-y compris les livres fins, penchés, couchés à plat, sur un meuble voisin ou coupés par le bord de la photo, et ceux dont le texte
-est petit, pâle, doré ou en couleur claire sur fond clair : regarde-les de près avant de conclure qu'ils sont illisibles.
+y compris les livres fins, penchés, couchés à plat, sur un meuble voisin ou coupés par le bord de la photo.
 
 Méthode, à suivre dans l'ordre, sans sauter d'étape :
 1. Repère d'abord toutes les étagères (ou piles) de la photo et numérote-les de haut en bas : 1 = la plus haute.
@@ -312,12 +311,10 @@ Méthode, à suivre dans l'ordre, sans sauter d'étape :
    chaque tranche dont un mot est lisible devient un livre de la liste, dans cet ordre.
 3. Quand tu arrives au bout à droite, passe à l'étagère suivante (2, puis 3…) et recommence à gauche.
 4. Une pile de livres couchés se lit de haut en bas, livre par livre.
-5. À la fin, reprends chaque étagère et compte ses tranches une par une, de gauche à droite : chaque tranche comptée doit
-   avoir son livre dans la liste. Ajoute à leur place celles qui manquent, surtout les tranches fines, les grands livres
-   d'art (souvent lus en petits caractères) et celles collées à une tranche de même couleur.
+5. À la fin, reprends chaque étagère et vérifie qu'aucune tranche lisible n'a été oubliée, surtout les tranches fines
+   et celles collées à une tranche de même couleur ; ajoute celles qui manquent à leur place.
 Deux tranches voisines de la même couleur sont deux livres distincts : sépare-les dès que le texte, la police, l'éditeur
-ou le sens de lecture change, et ne réunis jamais deux livres dans une même forme. Si un "title" mélange deux titres
-(« Aikido Initiation Leçons d'aïkido », « San Francisco Los Angeles »), ce sont deux livres : donne-les séparément.
+ou le sens de lecture change, et ne réunis jamais deux livres dans une même forme.
 Les livres sont majoritairement en ${LANGUAGE_NAMES[language] ?? language}.
 ${frameLines(f).size}
 
@@ -337,7 +334,7 @@ ${shapeLine(f)}
 
 - "shelf" : le numéro de l'étagère où se trouve le livre (étape 1).
 
-Ignore seulement les livres dont aucun texte n'est lisible ; dans le doute, garde le livre avec "confidence" : "low". La liste suit l'ordre de la méthode : étagère 1 de gauche à droite,
+Ignore les livres dont aucun texte n'est lisible. La liste suit l'ordre de la méthode : étagère 1 de gauche à droite,
 puis étagère 2 de gauche à droite, et ainsi de suite jusqu'en bas.`;
 
 const SINGLE_PROMPT = (f: Frame) => `Cette photo montre un seul livre (couverture, dos ou code-barres).
