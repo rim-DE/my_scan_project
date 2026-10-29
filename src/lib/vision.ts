@@ -95,6 +95,19 @@ export function tileLayout(width: number, height: number): Tile[] {
 }
 
 /**
+ * Livres d'une bande qu'aucune autre bande ne voit, même en partie : ils ne peuvent pas être des doublons et
+ * seront forcément gardés par mergeTiles, on peut donc les identifier sans attendre les autres bandes.
+ */
+export function soloBooks(books: CleanDetection[], tileIndex: number, tiles: Tile[], width: number): CleanDetection[] {
+  return books.filter((b) => {
+    if (!b.bbox) return false;
+    const left = b.bbox.x * width;
+    const right = (b.bbox.x + b.bbox.w) * width;
+    return tiles.every((t, j) => j === tileIndex || right <= t.left || left >= t.left + t.width);
+  });
+}
+
+/**
  * Rassemble les livres des différentes bandes. Un livre vu dans le recouvrement de deux bandes n'est gardé qu'une fois
  * (celui dont la forme est la plus grande, donc la moins coupée), puis tout est remis dans l'ordre de lecture :
  * étagère par étagère, de gauche à droite.
@@ -222,7 +235,12 @@ function anthropic(): Anthropic {
 
 export async function detectBooks(
   jpeg: Buffer,
-  opts: { language: string; mode: "shelf" | "single" },
+  opts: {
+    language: string;
+    mode: "shelf" | "single";
+    /** Appelé dès qu'une bande est lue, avec ses livres qui seront sûrement gardés (voir soloBooks). */
+    onSure?: (books: CleanDetection[]) => void;
+  },
 ): Promise<CleanDetection[]> {
   const meta = await sharp(jpeg).metadata();
   const size = { width: meta.width ?? 0, height: meta.height ?? 0 };
@@ -234,7 +252,7 @@ export async function detectBooks(
   }
   const tiles = tileLayout(size.width, size.height);
   const perTile = await Promise.all(
-    tiles.map(async (tile) => {
+    tiles.map(async (tile, i) => {
       const crop =
         tiles.length === 1
           ? jpeg
@@ -246,7 +264,9 @@ export async function detectBooks(
       const sx = tile.width / image.width;
       const sy = size.height / image.height;
       const shifted = books.map((b) => ({ ...b, corners: b.corners.map((c) => ({ x: c.x * sx + tile.left, y: c.y * sy })) }));
-      return cleanDetections(shifted, size);
+      const clean = cleanDetections(shifted, size);
+      opts.onSure?.(tiles.length === 1 ? clean : soloBooks(clean, i, tiles, size.width));
+      return clean;
     }),
   );
   return tiles.length === 1 ? perTile[0] : mergeTiles(perTile);
