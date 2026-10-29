@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapLimit } from "../concurrency";
+import { createLimiter, mapLimit } from "../concurrency";
 import { BADGES, unlockedBadges } from "../badges";
 import { formatPrice, parsePriceToCents } from "../money";
 import { fmt, getDict } from "../i18n";
@@ -19,6 +19,25 @@ describe("utilitaires", () => {
     });
     expect(out).toEqual([2, 4, 6, 8, 10, 12]);
     expect(peak).toBe(2);
+  });
+
+  it("createLimiter partage la limite entre plusieurs appelants", async () => {
+    const limit = createLimiter(3);
+    let running = 0;
+    let peak = 0;
+    const task = (n: number) =>
+      limit(async () => {
+        running++;
+        peak = Math.max(peak, running);
+        await new Promise((r) => setTimeout(r, 2 + (n % 3)));
+        running--;
+        return n;
+      });
+    // Deux « photos » qui lancent chacune 5 tâches en même temps.
+    const [a, b] = await Promise.all([Promise.all([1, 2, 3, 4, 5].map(task)), Promise.all([6, 7, 8, 9, 10].map(task))]);
+    expect([...a, ...b]).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(peak).toBe(3);
+    expect(running).toBe(0);
   });
 
   it("badges", () => {

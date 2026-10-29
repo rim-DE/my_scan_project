@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanDetections, DetectionResultSchema, mergeTiles, readingOrder, tileLayout, type DetectedBook } from "../vision";
+import { cleanDetections, DetectionResultSchema, mergeTiles, readingOrder, soloBooks, tileLayout, type DetectedBook } from "../vision";
 
 const SIZE = { width: 1000, height: 2000 };
 
@@ -89,6 +89,25 @@ describe("découpage en bandes", () => {
     const other = cleanDetections([book({ title: "Notre-Dame de Paris", corners: quad(520, 100, 560, 900) })], SIZE);
     const out = mergeTiles([[...full], [...cut, ...other]]);
     expect(out.map((b) => b.title)).toEqual(["Les Misérables", "Notre-Dame de Paris"]);
+  });
+
+  it("ne lance tôt que les livres qu'aucune autre bande ne voit", () => {
+    const tiles = [
+      { left: 0, width: 600 },
+      { left: 400, width: 600 },
+    ];
+    const books = cleanDetections(
+      [
+        book({ title: "Seul à gauche", corners: quad(100, 100, 140, 900) }),
+        book({ title: "Dans le recouvrement", corners: quad(450, 100, 480, 900) }),
+        book({ title: "À cheval sur la limite", corners: quad(380, 100, 420, 900) }),
+      ],
+      SIZE,
+    );
+    expect(soloBooks(books, 0, tiles, SIZE.width).map((b) => b.title)).toEqual(["Seul à gauche"]);
+    // Ce qui est solo est forcément gardé par la fusion des bandes.
+    const merged = mergeTiles([books, cleanDetections([book({ title: "Dans le recouvrement", corners: quad(450, 100, 482, 900) })], SIZE)]);
+    expect(merged.map((b) => b.title)).toContain("Seul à gauche");
   });
 
   it("ne fusionne pas un livre penché avec son voisin d'une autre bande sans mot en commun", () => {

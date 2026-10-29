@@ -3,12 +3,17 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "./db";
 import { getStorage } from "./storage";
-import { detectBooks } from "./vision";
+import { detectBooks, type CleanDetection } from "./vision";
 import { findOrCreateBookByIsbn, findOrCreateBookByTitle } from "./catalog";
 import { refreshPrices } from "./prices";
-import { mapLimit } from "./concurrency";
+import { fillMissingPrices } from "./prices/fill";
+import { createLimiter, mapLimit } from "./concurrency";
 
 const STALE_PROCESSING_MS = 15 * 60 * 1000;
+/** Livres identifiés en même temps, toutes photos confondues (Google Books / BnF réessaient s'ils saturent). */
+const IDENTIFY_CONCURRENCY = 8;
+/** Une fonction Vercel dure 300 s au plus : on garde de la marge avant d'enchaîner sur les prix. */
+const FUNCTION_BUDGET_MS = 280_000;
 
 /** Réserve le scan (PENDING -> PROCESSING) de façon atomique : un seul traitement à la fois. */
 async function claim(scanId: string): Promise<boolean> {
@@ -24,26 +29,40 @@ async function claim(scanId: string): Promise<boolean> {
 
 export async function processScan(scanId: string): Promise<void> {
   if (!(await claim(scanId))) return;
+  const started = Date.now();
   const scan = await prisma.scan.findUniqueOrThrow({ where: { id: scanId }, include: { photos: { orderBy: { position: "asc" } } } });
 
   try {
     if (scan.kind === "PHOTO") {
       // On repart de zéro si le scan est relancé.
       await prisma.detection.deleteMany({ where: { scanId } });
-      // Les photos sont analysées 2 par 2, et les livres identifiés 4 à la fois (au-delà, Google Books sature).
+      // Les photos sont analysées 2 par 2. Chaque livre est identifié dès que sa bande est lue, sans attendre
+      // le reste de la photo ; les prix viennent après, pour que le scan se termine plus vite.
+      const limit = createLimiter(IDENTIFY_CONCURRENCY);
+      // Ne lève jamais d'erreur : une identification lancée tôt ne doit pas faire planter le scan avant d'être attendue.
+      const identify = (d: CleanDetection) =>
+        limit(async () => {
+          try {
+            const book = d.isbn ? await findOrCreateBookByIsbn(d.isbn) : null;
+            return book ?? (await findOrCreateBookByTitle({ title: d.title, author: d.author, publisher: d.publisher, language: scan.bookLanguage }));
+          } catch (e) {
+            console.warn("[scan] identification impossible", d.title, e);
+            return null;
+          }
+        });
       await mapLimit(scan.photos, 2, async (photo) => {
         const jpeg = await getStorage().get(photo.storageKey);
-        const detected = await detectBooks(jpeg, { language: scan.bookLanguage, mode: "shelf" });
-
-        await mapLimit(detected, 4, async (d) => {
-          let book = d.isbn ? await findOrCreateBookByIsbn(d.isbn) : null;
-          if (!book) {
-            book = await findOrCreateBookByTitle({ title: d.title, author: d.author, publisher: d.publisher, language: scan.bookLanguage }).catch((e) => {
-              console.warn("[scan] identification impossible", d.title, e);
-              return null;
-            });
-          }
-          if (book) await refreshPrices(book.id, scan.country).catch((e) => console.warn("[scan] prix", e));
+        const early = new Map<CleanDetection, ReturnType<typeof identify>>();
+        const detected = await detectBooks(jpeg, {
+          language: scan.bookLanguage,
+          mode: "shelf",
+          onSure: (books) => books.forEach((d) => early.set(d, identify(d))),
+        });
+        // Les livres vus dans le recouvrement de deux bandes ne sont identifiés qu'une fois les doublons retirés.
+        const books = detected.map((d) => early.get(d) ?? identify(d));
+        // Enregistrés dans l'ordre de lecture, au fur et à mesure : la page les affiche pendant que les suivants s'identifient.
+        for (const [i, d] of detected.entries()) {
+          const book = await books[i];
           await prisma.detection.create({
             data: {
               scanId,
@@ -57,7 +76,7 @@ export async function processScan(scanId: string): Promise<void> {
               confidence: d.confidence,
             },
           });
-        });
+        }
       });
     } else {
       // Scan par code-barres : la détection existe déjà, on rafraîchit les prix.
@@ -66,6 +85,12 @@ export async function processScan(scanId: string): Promise<void> {
     }
 
     await prisma.scan.update({ where: { id: scanId }, data: { status: "DONE", finishedAt: new Date() } });
+    // Les livres sont visibles : on récupère maintenant leurs prix avec le temps qui reste à la fonction.
+    // Ce qui n'est pas fini sera repris quand la page du scan est ouverte (ou par le cron).
+    if (scan.kind === "PHOTO") {
+      const budget = FUNCTION_BUDGET_MS - (Date.now() - started);
+      if (budget > 10_000) await fillMissingPrices(scanId, budget).catch((e) => console.warn("[scan] prix", e));
+    }
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     console.error(`[scan] ${scanId} en erreur`, e);

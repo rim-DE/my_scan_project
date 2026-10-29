@@ -11,3 +11,24 @@ export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T, in
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
   return results;
 }
+
+/**
+ * Limite partagée : au plus `limit` tâches lancées par la fonction renvoyée tournent en même temps,
+ * d'où qu'elles viennent (plusieurs photos, plusieurs bandes…).
+ */
+export function createLimiter(limit: number): <R>(fn: () => Promise<R>) => Promise<R> {
+  let active = 0;
+  const waiting: (() => void)[] = [];
+  return async (fn) => {
+    // Une place libérée passe directement à la tâche suivante en attente, sans repasser par le compteur.
+    if (active >= limit) await new Promise<void>((resolve) => waiting.push(resolve));
+    else active++;
+    try {
+      return await fn();
+    } finally {
+      const next = waiting.shift();
+      if (next) next();
+      else active--;
+    }
+  };
+}
