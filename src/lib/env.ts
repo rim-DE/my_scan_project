@@ -28,19 +28,16 @@ export const env = {
   /**
    * Modèle qui lit les photos. VISION_PROVIDER l'emporte ; sinon Gemini (le moins cher) dès que GEMINI_API_KEY existe,
    * sinon Claude si seule ANTHROPIC_API_KEY existe (un déploiement sans clé Gemini continue donc de marcher).
-   * OpenRouter (modèles open source) ne sert que si VISION_PROVIDER=openrouter.
    */
-  visionProvider: (): "gemini" | "claude" | "openrouter" => {
-    const p = process.env.VISION_PROVIDER?.toLowerCase().trim();
-    if (p === "gemini" || p === "claude" || p === "openrouter") return p;
+  visionProvider: (): "gemini" | "claude" => {
+    const p = process.env.VISION_PROVIDER?.toLowerCase();
+    if (p === "gemini" || p === "claude") return p;
     return !process.env.GEMINI_API_KEY && process.env.ANTHROPIC_API_KEY ? "claude" : "gemini";
   },
   geminiApiKey: () => process.env.GEMINI_API_KEY,
   geminiModel: () => process.env.GEMINI_MODEL || "gemini-3.8-flash",
   /** Niveau de réflexion Gemini ("minimal", "low", "medium", "high") ; vide = réglage par défaut du modèle. */
   geminiThinking: () => process.env.GEMINI_THINKING || undefined,
-  openRouterApiKey: () => process.env.OPENROUTER_API_KEY,
-  openRouterModel: () => process.env.OPENROUTER_MODEL || "qwen/qwen3-vl-235b-a22b-instruct",
 
   anthropicApiKey: () => process.env.ANTHROPIC_API_KEY,
   anthropicModel: () => process.env.ANTHROPIC_MODEL || "claude-opus-5-5",
