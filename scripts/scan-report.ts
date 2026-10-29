@@ -77,7 +77,9 @@ async function main() {
   let detections: CleanDetection[];
   const notes: string[] = [];
   if (values.detections) {
-    const raw = DetectionResultSchema.parse(JSON.parse(await readFile(values.detections, "utf8")));
+    const file = JSON.parse(await readFile(values.detections, "utf8")) as { books?: Record<string, unknown>[] };
+    // Les anciennes lectures n'ont pas de numéro d'étagère.
+    const raw = DetectionResultSchema.parse({ books: (file.books ?? []).map((b) => ({ shelf: 0, ...b })) });
     detections = cleanDetections(raw.books, photo);
     notes.push(`Lecture de la photo rejouée depuis ${basename(values.detections)} (le modèle n'a pas été appelé).`);
   } else {

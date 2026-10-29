@@ -15,6 +15,7 @@ describe("geminiSchema", () => {
 
 describe("parseGeminiJson", () => {
   const book = {
+    shelf: 1,
     title: "Bambous rustiques",
     author: null,
     publisher: null,
