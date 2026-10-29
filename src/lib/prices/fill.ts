@@ -21,34 +21,42 @@ export function retryableDetections(scanId: string) {
   });
 }
 
+/** Livres non identifiés recherchés en même temps : au-delà, Google Books sature. */
+const IDENTIFY_BATCH = 4;
+
 /**
  * Relance la recherche des livres non identifiés : pendant le scan, les jetons Keepa (recherche Amazon) ou un catalogue
- * ont pu manquer. Un livre vraiment introuvable est mis en cache et ne coûte plus rien ; les autres sont réessayés
- * au plus MAX_LOOKUP_TRIES fois.
+ * ont pu manquer, ou le scan les a enregistrés sans les chercher (Google Vision). Un livre vraiment introuvable est mis
+ * en cache et ne coûte plus rien ; les autres sont réessayés au plus MAX_LOOKUP_TRIES fois.
  */
 async function identifyMissing(scanId: string, language: string, deadline: number): Promise<void> {
   const queue = await retryableDetections(scanId);
-  let counted: string | null = null;
+  // Une tentative comptée par livre et par passage, même si on attend qu'un catalogue se libère entre-temps.
+  const counted = new Set<string>();
   while (queue.length > 0 && Date.now() < deadline) {
-    const d = queue[0];
-    // Une tentative comptée par livre et par passage, même si on attend des jetons Keepa entre-temps.
-    if (counted !== d.id) {
-      await prisma.detection.update({ where: { id: d.id }, data: { lookupTries: { increment: 1 } } });
-      counted = d.id;
+    const batch = queue.splice(0, IDENTIFY_BATCH);
+    const fresh = batch.filter((d) => !counted.has(d.id)).map((d) => d.id);
+    fresh.forEach((id) => counted.add(id));
+    if (fresh.length > 0) await prisma.detection.updateMany({ where: { id: { in: fresh } }, data: { lookupTries: { increment: 1 } } });
+    const busy = await Promise.all(
+      batch.map(async (d) => {
+        try {
+          const book = await findOrCreateBookByTitle({ title: d.rawTitle!, author: d.rawAuthor, language });
+          if (book) await prisma.detection.update({ where: { id: d.id }, data: { bookId: book.id } });
+          return false;
+        } catch (e) {
+          console.warn("[scan] identification impossible", d.rawTitle, e);
+          return e instanceof CatalogUnavailableError;
+        }
+      }),
+    );
+    // Plus de jetons Keepa (ou catalogue saturé) : on réessaie ces livres quand il y en aura.
+    const retry = batch.filter((_, i) => busy[i]);
+    if (retry.length > 0) {
+      queue.unshift(...retry);
+      if (Date.now() + RATE_LIMIT_PAUSE_MS >= deadline) break;
+      await new Promise((r) => setTimeout(r, RATE_LIMIT_PAUSE_MS));
     }
-    try {
-      const book = await findOrCreateBookByTitle({ title: d.rawTitle!, author: d.rawAuthor, language });
-      if (book) await prisma.detection.update({ where: { id: d.id }, data: { bookId: book.id } });
-    } catch (e) {
-      console.warn("[scan] identification impossible", d.rawTitle, e);
-      // Plus de jetons Keepa (ou catalogue saturé) : on réessaie le même livre quand il y en aura.
-      if (e instanceof CatalogUnavailableError) {
-        if (Date.now() + RATE_LIMIT_PAUSE_MS >= deadline) break;
-        await new Promise((r) => setTimeout(r, RATE_LIMIT_PAUSE_MS));
-        continue;
-      }
-    }
-    queue.shift();
   }
 }
 

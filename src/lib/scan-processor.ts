@@ -9,6 +9,7 @@ import { refreshPrices } from "./prices";
 import { fillMissingPrices } from "./prices/fill";
 import { refineSpines } from "./refine";
 import { createLimiter, mapLimit } from "./concurrency";
+import { env } from "./env";
 
 const STALE_PROCESSING_MS = 15 * 60 * 1000;
 /** Livres identifiés en même temps, toutes photos confondues (Google Books / BnF réessaient s'ils saturent). */
@@ -51,16 +52,20 @@ export async function processScan(scanId: string): Promise<void> {
             return null;
           }
         });
+      // Google Vision lit toute la photo d'un coup (souvent plus de 100 livres) : tout identifier avant d'enregistrer
+      // dépasserait les 5 minutes d'une fonction Vercel. On enregistre donc les livres tout de suite, et ils sont
+      // identifiés ensuite par paquets (fillMissingPrices, relancé par la page du scan et par le cron).
+      const identifyNow = env.visionProvider() !== "google-vision";
       await mapLimit(scan.photos, 2, async (photo) => {
         const jpeg = await getStorage().get(photo.storageKey);
         const early = new Map<CleanDetection, ReturnType<typeof identify>>();
         const detected = await detectBooks(jpeg, {
           language: scan.bookLanguage,
           mode: "shelf",
-          onSure: (books) => books.forEach((d) => early.set(d, identify(d))),
+          onSure: identifyNow ? (books) => books.forEach((d) => early.set(d, identify(d))) : undefined,
         });
         // Les livres vus dans le recouvrement de deux bandes ne sont identifiés qu'une fois les doublons retirés.
-        const books = detected.map((d) => early.get(d) ?? identify(d));
+        const books = detected.map((d) => (identifyNow ? (early.get(d) ?? identify(d)) : Promise.resolve(null)));
         // Enregistrés dans l'ordre de lecture, au fur et à mesure : la page les affiche pendant que les suivants s'identifient.
         for (const [i, d] of detected.entries()) {
           const book = await books[i];
