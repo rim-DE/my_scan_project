@@ -112,6 +112,8 @@ model Detection {
   /// Sens de lecture de la tranche : bottom_to_top, top_to_bottom ou left_to_right.
   textDirection String?
   confidence    String?
+  /// Vignette recadrée par un zoom (titre connu) : fait une seule fois, réussi ou non.
+  refinedAt     DateTime?
   note          String?
   createdAt     DateTime @default(now())
 
