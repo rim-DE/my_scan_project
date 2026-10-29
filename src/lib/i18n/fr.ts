@@ -163,7 +163,7 @@ export const fr = {
     refreshPrices: "Actualiser les prix",
     demoWarning: "Données de démonstration (fausses) — PRICE_DEMO_MODE est activé.",
     publisherPrice: "Prix éditeur",
-    biblioRankHelp: "Score de 0 à 100 : profit net × chance de vendre ton exemplaire en 3 mois (ventes Amazon partagées entre les vendeurs), avec le rachat comme plancher.",
+    biblioRankHelp: "Score de 0 à 100 : profit net × chance de vendre en 3 mois (les ventes récentes comptent plus). Il baisse vite si la dernière vente est ancienne, ne dépasse pas 5 sans vente sur 12 mois, et le rachat sert de plancher.",
     inStock: "Déjà en stock",
     banger: "Pépite",
     bangerHelp: "Livre intéressant à la revente : prix ≥ 35 €, au moins 3 ventes sur 12 mois, ratio ≥ 1,2, et offre actuelle absente ou ≥ 27 €.",
