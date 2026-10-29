@@ -82,33 +82,28 @@ describe("nombre d'offres", () => {
 });
 
 describe("BiblioRank", () => {
-  it("classe d'abord le livre qui rapporte ET se vend en ce moment", () => {
-    // Bouger en accouchant (export BiblioScan) : 13,67 € net, 29 ventes/an dont 14 en 6 mois, vendu il y a 5 jours.
-    const fast = biblioRank({ netAfterFeesCents: 1367, sales12m: 29, sales6m: 14, sales30d: 4, monthsSinceLastSale: 0.2, buybackCents: null });
-    // 18 € net mais 1 vente par an, il y a 11 mois.
-    const slow = biblioRank({ netAfterFeesCents: 1800, sales12m: 1, sales6m: 0, sales30d: 0, monthsSinceLastSale: 11, buybackCents: null });
-    expect(fast.biblioRank).toBe(75);
-    expect(slow.biblioRank!).toBeLessThan(5);
+  it("suit le classement de BiblioScan sur son export (Bambous > Larousse grossesse > Bouger en accouchant)", () => {
+    const bambous = biblioRank({ netAfterFeesCents: 7116, sales12m: 2, sales6m: 1, currentPriceCents: 8200, medianCents: 9700, buybackCents: null });
+    const larousse = biblioRank({ netAfterFeesCents: 1899, sales12m: 19, sales6m: 9, currentPriceCents: 3167, medianCents: 3167, buybackCents: null });
+    const bouger = biblioRank({ netAfterFeesCents: 1367, sales12m: 29, sales6m: 14, currentPriceCents: 2850, medianCents: 2280, buybackCents: null });
+    expect(bambous.biblioRank!).toBeGreaterThan(larousse.biblioRank!);
+    expect(larousse.biblioRank!).toBeGreaterThan(bouger.biblioRank!);
+  });
+
+  it("fait baisser un livre quand quelqu'un le vend bien sous la médiane", () => {
+    // La mesure des médias : médiane 54 €, en vente à 6 €.
+    const base = { netAfterFeesCents: 3700, sales12m: 3, sales6m: 1, medianCents: 5404, buybackCents: null };
+    const cheap = biblioRank({ ...base, currentPriceCents: 599 }).biblioRank!;
+    const fair = biblioRank({ ...base, currentPriceCents: 5404 }).biblioRank!;
+    expect(cheap).toBeLessThan(fair * 0.6);
   });
 
   it("plafonne à 5 un livre sans vente sur 12 mois, même très cher ou avec un rachat", () => {
-    // Les Ferrari : 55 € net, dernières ventes il y a plus de 4 ans.
-    expect(biblioRank({ netAfterFeesCents: 5516, sales12m: 0, sales6m: 0, sales30d: 0, monthsSinceLastSale: 51, buybackCents: null })).toEqual({
-      expected90dCents: 0,
-      biblioRank: 0,
-    });
-    // Prix médian de 2 000 € : toujours pas en tête de liste.
-    expect(biblioRank({ netAfterFeesCents: 199000, sales12m: 0, monthsSinceLastSale: 14, buybackCents: null }).biblioRank!).toBeLessThanOrEqual(5);
+    expect(biblioRank({ netAfterFeesCents: 5516, sales12m: 0, sales6m: 0, buybackCents: null })).toEqual({ expected90dCents: 0, biblioRank: 0 });
+    expect(biblioRank({ netAfterFeesCents: 199000, sales12m: 0, buybackCents: null }).biblioRank!).toBeLessThanOrEqual(5);
     const buyback = biblioRank({ netAfterFeesCents: 7388, sales12m: 0, buybackCents: 751 });
     expect(buyback.expected90dCents).toBe(751);
     expect(buyback.biblioRank).toBe(5);
-  });
-
-  it("fait fondre le score quand la dernière vente est ancienne", () => {
-    const base = { netAfterFeesCents: 3000, sales12m: 3, sales6m: 1, sales30d: 0, buybackCents: null };
-    const recent = biblioRank({ ...base, monthsSinceLastSale: 2 }).biblioRank!;
-    const old = biblioRank({ ...base, monthsSinceLastSale: 9 }).biblioRank!;
-    expect(old).toBeLessThan(recent / 2);
   });
 
   it("n'invente pas de score sans nombre de ventes ni rachat", () => {

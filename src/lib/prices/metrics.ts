@@ -60,13 +60,16 @@ const RANK_SCALE_CENTS = 1000;
 /** Sans aucune vente sur 12 mois, le score ne dépasse jamais 5, quel que soit le prix. */
 const NO_SALE_MAX_RANK = 5;
 
+/** Petit bonus par livre vendu : les petits prix qui partent vite remontent, comme dans le classement de BiblioScan. */
+const SALE_BONUS_CENTS = 50;
+
 /**
- * « BiblioRank » maison : combien tu gagnes × à quelle vitesse le livre part en ce moment.
- * - rythme récent : les ventes des 6 derniers mois pèsent plus (0,6 × ventes 6 mois / 6 + 0,4 × ventes 12 mois / 12),
- *   et au moins le nombre de ventes des 30 derniers jours par mois ;
- * - chance de vendre en 3 mois = 1 − e^(−3 × rythme mensuel) ;
- * - fraîcheur : au-delà de 3 mois sans vente, le gain espéré fond (÷ e tous les 4 mois) ;
- * - 0 vente sur 12 mois : score plafonné à 5 ;
+ * « BiblioRank » maison, calé sur le classement de BiblioScan (ses exports de 62 et 211 livres) :
+ * - rythme de vente = moitié ventes sur 6 mois, moitié ventes sur 12 mois (par mois) ;
+ * - chance de vendre = 1 − e^(−4 × rythme mensuel) ;
+ * - gain espéré = (profit net + 0,50 €) × chance de vendre ;
+ * - concurrence : si une offre actuelle est sous la médiane, le gain baisse (× √(offre / médiane)) ;
+ * - 0 vente sur 12 mois : score plafonné à 5 (choix de rim, BiblioScan les classe parfois haut) ;
  * - un prix de rachat (Momox…) est un gain sûr : il sert de plancher.
  * Sans nombre de ventes connu (pas de Keepa) ni rachat, pas de score.
  */
@@ -74,19 +77,19 @@ export function biblioRank(input: {
   netAfterFeesCents: number | null;
   sales12m: number | null;
   sales6m?: number | null;
-  sales30d?: number | null;
-  /** Mois écoulés depuis la dernière vente connue (null : aucune). */
-  monthsSinceLastSale?: number | null;
+  /** Offre la moins chère en ce moment, et prix médian de vente. */
+  currentPriceCents?: number | null;
+  medianCents?: number | null;
   buybackCents: number | null;
 }): { expected90dCents: number | null; biblioRank: number | null } {
-  const { netAfterFeesCents: net, sales12m, buybackCents } = input;
+  const { netAfterFeesCents: net, sales12m, currentPriceCents: cur, medianCents: med, buybackCents } = input;
   let expected: number | null = null;
   if (net !== null && sales12m !== null) {
     const s6 = Math.min(input.sales6m ?? sales12m / 2, sales12m);
-    const pace = Math.max(0.6 * (s6 / 6) + 0.4 * (sales12m / 12), input.sales30d ?? 0);
-    const since = input.monthsSinceLastSale ?? (sales12m > 0 ? 0 : Infinity);
-    const freshness = since <= 3 ? 1 : Math.exp(-(since - 3) / 4);
-    expected = Math.round(Math.max(0, net) * (1 - Math.exp(-3 * pace)) * freshness);
+    const pace = 0.5 * (s6 / 6) + 0.5 * (sales12m / 12);
+    const chance = 1 - Math.exp(-4 * pace);
+    const competition = cur && med && cur < med ? Math.sqrt(cur / med) : 1;
+    expected = Math.round((Math.max(0, net) + SALE_BONUS_CENTS) * chance * competition);
   }
   if (buybackCents !== null) expected = Math.max(expected ?? 0, buybackCents);
   if (expected === null) return { expected90dCents: null, biblioRank: null };
@@ -143,17 +146,17 @@ export function computeMetrics(
 
   const currentOfferCount = book.offerCount ?? offers.length;
   const sales6m = sold.filter((p) => now.getTime() - p.soldAt.getTime() <= 182 * DAY).length;
+  const currentPriceCents = offers.length ? Math.min(...offers.map((p) => p.priceCents)) : null;
   const rank = biblioRank({
     netAfterFeesCents: stats.netAfterFeesCents,
     sales12m,
     sales6m: sales12m !== null ? Math.min(sales6m, sales12m) : null,
-    sales30d,
-    monthsSinceLastSale: allSold.length ? (now.getTime() - allSold[0].soldAt.getTime()) / (30.44 * DAY) : null,
+    currentPriceCents,
+    medianCents: stats.medianCents,
     buybackCents: stats.buybackMaxCents,
   });
 
   const toRow = (p: (typeof allSold)[number]) => ({ priceCents: p.priceCents, soldAt: p.soldAt.toISOString(), platform: p.platform });
-  const currentPriceCents = offers.length ? Math.min(...offers.map((p) => p.priceCents)) : null;
   return {
     sales12m,
     sales30d,
