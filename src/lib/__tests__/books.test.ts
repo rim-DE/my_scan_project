@@ -31,6 +31,18 @@ describe("identification des livres", () => {
     expect(scoreCandidate({ title: "Grossesse" }, { ...osteo, title: "Grossesse" })).toBeGreaterThan(MIN_MATCH_SCORE);
   });
 
+  it("ne prend pas le Petit Larousse pour le Grand, ni un tome pour un autre", () => {
+    const base = { isbn13: null, isbn10: null, authors: [], publisher: "Larousse", publishedDate: null, language: "fr", pageCount: null, coverUrl: null, listPriceCents: null, source: "google" as const };
+    const petit = { ...base, title: "Le Petit Larousse de la grossesse" };
+    const grand = { ...base, title: "Le Grand Larousse de la grossesse" };
+    const read = { title: "Grand Larousse de la grossesse", publisher: "Larousse" };
+    expect(scoreCandidate(read, petit)).toBe(0);
+    expect(scoreCandidate(read, grand)).toBeGreaterThan(0.95);
+    expect(scoreCandidate({ title: "Larousse de la grossesse" }, petit)).toBeGreaterThan(MIN_MATCH_SCORE);
+    expect(scoreCandidate({ title: "Harry Potter tome 3" }, { ...base, title: "Harry Potter tome 2" })).toBe(0);
+    expect(scoreCandidate({ title: "Harry Potter tome 3" }, { ...base, title: "Harry Potter tome 3" })).toBeGreaterThan(0.95);
+  });
+
   it("un mot coupé sur la tranche ne valide pas un autre titre", () => {
     const base = { isbn10: null, publishedDate: null, language: "fr", pageCount: null, coverUrl: null, listPriceCents: null, source: "google" as const, publisher: null };
     const jeux = { ...base, isbn13: null, title: "Les jeux rustiques", authors: ["Louis Beydts"] };
