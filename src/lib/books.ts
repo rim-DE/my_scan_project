@@ -101,11 +101,6 @@ export function mainTitle(title: string): string {
   return title.split(/\s*[:(]|\s+[-–]\s+|\s*[.;]\s+/)[0].trim() || title;
 }
 
-/** Titre sans son sous-titre : « Tout savoir pour maigrir: Ces vérités… » → « Tout savoir pour maigrir ». */
-export function mainTitle(title: string): string {
-  return title.split(/\s*[:(]|\s+[-–]\s+|\s*[.;]\s+/)[0].trim() || title;
-}
-
 export function scoreCandidate(query: TitleQuery, c: BookInfo): number {
   if (contradictsTitle(query.title, c.title)) return 0;
   const authorNames = query.author ? [query.author, ...c.authors] : c.authors;
