@@ -39,6 +39,38 @@ export const DetectionResultSchema = z.object({
 
 export type DetectedBook = z.infer<typeof DetectedBookSchema>;
 
+/**
+ * Gemini place mal 4 coins (contours en triangle, vignettes décalées) mais est entraîné à donner un rectangle
+ * [ymin, xmin, ymax, xmax] de 0 à 1000 : on lui demande ce format, plus court, puis on le convertit en 4 coins.
+ */
+export const GeminiDetectionResultSchema = z.object({
+  books: z.array(
+    DetectedBookSchema.omit({ corners: true }).extend({
+      box_2d: z
+        .array(z.number().int())
+        .describe("Rectangle du livre sur la photo : [ymin, xmin, ymax, xmax], chaque valeur de 0 à 1000"),
+    }),
+  ),
+});
+
+type GeminiBook = z.infer<typeof GeminiDetectionResultSchema>["books"][number];
+
+/** Rectangle Gemini (0-1000) -> 4 coins en pixels de l'image envoyée, dans l'ordre haut-gauche, haut-droit, bas-droit, bas-gauche. */
+export function boxToCorners(box: number[], width: number, height: number): { x: number; y: number }[] {
+  if (box.length !== 4) return [];
+  const [y0, x0, y1, x1] = box;
+  const left = (Math.min(x0, x1) / GEMINI_SCALE) * width;
+  const right = (Math.max(x0, x1) / GEMINI_SCALE) * width;
+  const top = (Math.min(y0, y1) / GEMINI_SCALE) * height;
+  const bottom = (Math.max(y0, y1) / GEMINI_SCALE) * height;
+  return [
+    { x: left, y: top },
+    { x: right, y: top },
+    { x: right, y: bottom },
+    { x: left, y: bottom },
+  ].map((c) => ({ x: Math.round(c.x), y: Math.round(c.y) }));
+}
+
 /** Livre détecté avec sa forme convertie (coordonnées 0-1). */
 export interface CleanDetection extends DetectedBook {
   polygon: Point[] | null;
@@ -182,6 +214,16 @@ const frameLines = (f: Frame) =>
         coords: `Coordonnées en pixels (0,0 = coin haut gauche, ${f.w},${f.h} = coin bas droit de l'image)`,
       };
 
+/** Forme demandée pour chaque livre : 4 coins (Claude) ou un rectangle (Gemini, voir GeminiDetectionResultSchema). */
+const shapeLine = (f: Frame) =>
+  f.normalized
+    ? `- "box_2d" : le rectangle qui entoure la tranche (ou la couverture si le livre est vu de face) : [ymin, xmin, ymax, xmax],
+  chaque valeur de 0 à 1000 (0 = haut ou gauche de l'image, 1000 = bas ou droite). Colle aux bords réels de la tranche,
+  sans déborder sur les livres voisins ;`
+    : `- "corners" : les 4 coins de la tranche (ou de la couverture si le livre est vu de face), tels qu'ils sont sur la photo,
+  dans l'ordre haut-gauche, haut-droit, bas-droit, bas-gauche. ${frameLines(f).coords}. Si le livre est penché, les coins suivent son inclinaison : la forme n'est pas
+  forcément un rectangle droit. Colle aux bords réels de la tranche, sans déborder sur les livres voisins ;`;
+
 const SHELF_PROMPT = (language: string, f: Frame) => `Tu analyses la photo d'une ou plusieurs étagères ou piles de livres.
 Sois EXHAUSTIF : repère chaque livre dont on peut lire au moins un mot sur la tranche ou la couverture (titre, auteur ou éditeur),
 y compris les livres fins, penchés, couchés à plat, sur un meuble voisin ou coupés par le bord de la photo.
@@ -207,9 +249,7 @@ Pour chaque livre :
 - "author", "publisher" : si lisibles, sinon null ; regarde bien les petits caractères de la tranche, l'auteur y est souvent
   écrit plus petit que le titre ;
 - "isbn" : uniquement s'il est réellement lisible, sinon null (n'invente jamais d'ISBN) ;
-- "corners" : les 4 coins de la tranche (ou de la couverture si le livre est vu de face), tels qu'ils sont sur la photo,
-  dans l'ordre haut-gauche, haut-droit, bas-droit, bas-gauche. ${frameLines(f).coords}. Si le livre est penché, les coins suivent son inclinaison : la forme n'est pas
-  forcément un rectangle droit. Colle aux bords réels de la tranche, sans déborder sur les livres voisins ;
+${shapeLine(f)}
 - "text_direction" : sens de lecture du titre sur la photo : "bottom_to_top" (de bas en haut), "top_to_bottom" (de haut
   en bas), "left_to_right" (horizontal, à l'endroit, y compris une étiquette horizontale sur une tranche debout)
   ou "right_to_left" (horizontal mais à l'envers, par exemple un livre couché tête-bêche dans une pile) ;
@@ -223,7 +263,11 @@ puis étagère 2 de gauche à droite, et ainsi de suite jusqu'en bas.`;
 const SINGLE_PROMPT = (f: Frame) => `Cette photo montre un seul livre (couverture, dos ou code-barres).
 Lis le titre, l'auteur, l'éditeur et l'ISBN s'il est visible (souvent sous le code-barres, commence par 978 ou 979).
 Retourne exactement un élément dans "books" (ou aucun si ce n'est pas un livre), avec "shelf" = 1.
-Pour "corners", donne les 4 coins du livre, ordre haut-gauche, haut-droit, bas-droit, bas-gauche. ${frameLines(f).coords}.`;
+${
+  f.normalized
+    ? `Pour "box_2d", donne le rectangle du livre : [ymin, xmin, ymax, xmax], chaque valeur de 0 à 1000.`
+    : `Pour "corners", donne les 4 coins du livre, ordre haut-gauche, haut-droit, bas-droit, bas-gauche. ${frameLines(f).coords}.`
+}`;
 
 let client: Anthropic | null = null;
 function anthropic(): Anthropic {
@@ -285,12 +329,9 @@ async function callModel(
   const { books } = await callGemini(
     image.data,
     prompt({ w: GEMINI_SCALE, h: GEMINI_SCALE, normalized: true }),
-    DetectionResultSchema,
+    GeminiDetectionResultSchema,
   );
-  // Repère 0-1000 -> pixels de l'image envoyée.
-  const sx = image.width / GEMINI_SCALE;
-  const sy = image.height / GEMINI_SCALE;
-  return books.map((b) => ({ ...b, corners: b.corners.map((c) => ({ x: Math.round(c.x * sx), y: Math.round(c.y * sy) })) }));
+  return books.map(({ box_2d, ...b }: GeminiBook) => ({ ...b, corners: boxToCorners(box_2d, image.width, image.height) }));
 }
 
 async function callClaude(jpeg: Buffer, prompt: string): Promise<DetectedBook[]> {
