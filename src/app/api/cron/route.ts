@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/db";
 import { processPendingScans } from "@/lib/scan-processor";
-import { booksMissingPrices, fillMissingPrices } from "@/lib/prices/fill";
+import { booksMissingPrices, fillMissingPrices, retryableDetections } from "@/lib/prices/fill";
 
 export const maxDuration = 300;
 
@@ -27,7 +27,8 @@ export async function GET(req: Request) {
   for (const scan of recent) {
     const budget = 280_000 - (Date.now() - start);
     if (budget < 30_000) break;
-    if ((await booksMissingPrices(scan.id, scan.country)).length > 0) prices += await fillMissingPrices(scan.id, budget);
+    const pending = (await retryableDetections(scan.id)).length > 0 || (await booksMissingPrices(scan.id, scan.country)).length > 0;
+    if (pending) prices += await fillMissingPrices(scan.id, budget);
   }
   return NextResponse.json({ processed, prices });
 }

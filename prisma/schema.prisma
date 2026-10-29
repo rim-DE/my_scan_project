@@ -114,6 +114,8 @@ model Detection {
   confidence    String?
   /// Vignette recadrée par un zoom (titre connu) : fait une seule fois, réussi ou non.
   refinedAt     DateTime?
+  /// Recherches du livre déjà relancées en tâche de fond (catalogue ou jetons Keepa indisponibles pendant le scan).
+  lookupTries   Int      @default(0)
   note          String?
   createdAt     DateTime @default(now())
 

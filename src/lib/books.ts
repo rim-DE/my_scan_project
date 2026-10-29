@@ -377,10 +377,11 @@ export async function lookupByTitle(query: TitleQuery & { language?: string }): 
     console.warn("[books] Open Library indisponible", e);
     if (googleFailed && bnfFailed) throw new CatalogUnavailableError();
   }
-  if (!found) found = await amazonSearch(query);
-  // Un catalogue n'a pas répondu et les autres ne trouvent rien : on ne conclut pas « introuvable »,
-  // pour ne pas le garder en cache.
-  if (!found && (googleFailed || bnfFailed)) throw new CatalogUnavailableError();
+  let amazonFailed = false;
+  if (!found) found = await amazonSearch(query).catch(() => ((amazonFailed = true), null));
+  // Un catalogue (ou Amazon, faute de jetons Keepa) n'a pas répondu et les autres ne trouvent rien :
+  // on ne conclut pas « introuvable », pour ne pas le garder en cache ; la recherche sera relancée plus tard.
+  if (!found && (googleFailed || bnfFailed || amazonFailed)) throw new CatalogUnavailableError();
   return found;
 }
 
@@ -412,8 +413,9 @@ async function amazonSearch(query: TitleQuery): Promise<BookInfo | null> {
     });
     return pickBest(query, candidates);
   } catch (e) {
+    // Souvent plus de jetons Keepa : l'appelant ne doit pas en conclure que le livre est introuvable.
     console.warn("[books] recherche Amazon impossible", e);
-    return null;
+    throw new CatalogUnavailableError();
   }
 }
 
