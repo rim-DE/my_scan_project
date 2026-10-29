@@ -7,6 +7,7 @@ import { detectBooks, type CleanDetection } from "./vision";
 import { findOrCreateBookByIsbn, findOrCreateBookByTitle } from "./catalog";
 import { refreshPrices } from "./prices";
 import { fillMissingPrices } from "./prices/fill";
+import { refineSpines } from "./refine";
 import { createLimiter, mapLimit } from "./concurrency";
 
 const STALE_PROCESSING_MS = 15 * 60 * 1000;
@@ -90,6 +91,9 @@ export async function processScan(scanId: string): Promise<void> {
     if (scan.kind === "PHOTO") {
       const budget = FUNCTION_BUDGET_MS - (Date.now() - started);
       if (budget > 10_000) await fillMissingPrices(scanId, budget).catch((e) => console.warn("[scan] prix", e));
+      // Puis les vignettes des meilleurs livres (il faut leurs prix pour savoir lesquels) ; sinon la page le fera.
+      const left = FUNCTION_BUDGET_MS - (Date.now() - started);
+      if (left > 20_000) await refineSpines(scanId, left).catch((e) => console.warn("[scan] vignettes", e));
     }
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
