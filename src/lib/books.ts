@@ -75,7 +75,26 @@ export function wordCoverage(readWords: string[], candidateTitle: string): numbe
   return readWords.filter(hit).length / readWords.length;
 }
 
+/** Mots qui distinguent deux livres différents de la même collection (« Le Grand Larousse… » / « Le Petit Larousse… »). */
+const VARIANT_WORDS = new Set(["petit", "petite", "grand", "grande", "mini", "maxi", "junior", "little", "big", "great", "small", "pocket", "poche"]);
+
+/**
+ * Le titre trouvé contredit le titre lu : il porte un autre qualificatif (« petit » au lieu de « grand »)
+ * ou un autre numéro (« tome 2 » au lieu de « tome 3 »), sans celui qui a été lu.
+ */
+export function contradictsTitle(readTitle: string, candidateTitle: string): boolean {
+  const read = tokens(readTitle);
+  const found = tokens(candidateTitle);
+  const clash = (isKind: (w: string) => boolean) => {
+    const r = [...read].filter(isKind);
+    const f = [...found].filter(isKind);
+    return r.length > 0 && f.length > 0 && !r.some((w) => found.has(w));
+  };
+  return clash((w) => VARIANT_WORDS.has(w)) || clash((w) => /^\d+$/.test(w));
+}
+
 export function scoreCandidate(query: TitleQuery, c: BookInfo): number {
+  if (contradictsTitle(query.title, c.title)) return 0;
   const authorNames = query.author ? [query.author, ...c.authors] : c.authors;
   const titleScore = titleSimilarity(query.title, c.title, authorNames);
   const authorScore = query.author && c.authors.length > 0 ? Math.max(...c.authors.map((x) => similarity(query.author!, x))) : null;
@@ -403,6 +422,6 @@ function oneWordTitle(query: TitleQuery): boolean {
 }
 
 export function lookupCacheKey(title: string, author: string | null | undefined, language: string, publisher?: string | null): string {
-  // "v8" : on oublie les correspondances trouvées avec trop peu de mots du titre (« Grossesse », « …mbous rustiques »).
-  return `v8|${language}|${normalizeText(title)}|${normalizeText(author ?? "")}|${normalizeText(publisher ?? "")}`;
+  // "v9" : on oublie les correspondances qui contredisaient le titre lu (« Grand Larousse » pris pour « Petit Larousse »).
+  return `v9|${language}|${normalizeText(title)}|${normalizeText(author ?? "")}|${normalizeText(publisher ?? "")}`;
 }
