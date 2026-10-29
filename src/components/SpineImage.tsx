@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { boxToQuad, spineFrame, spineTransform, type NormalizedBox, type Point, type TextDirection } from "@/lib/geometry";
+import { boxToQuad, padFrame, spineFrame, spineTransform, type NormalizedBox, type Point, type TextDirection } from "@/lib/geometry";
 
 interface Props {
   src: string;
@@ -45,7 +45,8 @@ export function SpineImage({ src, polygon, bbox, textDirection, height = 44, alt
     loadImage(src).then((img) => {
       const canvas = ref.current;
       if (cancelled || !canvas) return;
-      const frame = spineFrame(quad, img.naturalWidth, img.naturalHeight, textDirection);
+      // Petite marge (6 % de chaque côté en épaisseur, 2 % en longueur) : la tranche entière reste visible.
+      const frame = padFrame(spineFrame(quad, img.naturalWidth, img.naturalHeight, textDirection), 0.06, 0.02);
       // Rendu net sur écran haute densité, sans agrandir au-delà de 3× la photo.
       const scale = Math.min(3, (height * (window.devicePixelRatio || 1)) / Math.max(1, frame.thickness));
       canvas.width = Math.max(1, Math.round(frame.length * scale));

@@ -36,6 +36,8 @@ export const env = {
   },
   geminiApiKey: () => process.env.GEMINI_API_KEY,
   geminiModel: () => process.env.GEMINI_MODEL || "gemini-3.8-flash",
+  /** Recadrage des vignettes par un appel Gemini par livre (payant) : désactivé sauf REFINE_SPINES=true. */
+  refineSpines: () => bool("REFINE_SPINES", false),
   /** Niveau de réflexion Gemini ("minimal", "low", "medium", "high") ; vide = réglage par défaut du modèle. */
   geminiThinking: () => process.env.GEMINI_THINKING || undefined,
 

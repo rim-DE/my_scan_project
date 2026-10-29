@@ -146,6 +146,21 @@ export function spineFrame(quad: Point[], width: number, height: number, directi
 }
 
 /**
+ * Agrandit le cadre autour de son centre (marge en proportion de l'épaisseur et de la longueur),
+ * pour ne pas couper le bord d'une tranche quand le rectangle lu est un peu trop serré.
+ */
+export function padFrame(f: SpineFrame, thicknessPad: number, lengthPad: number): SpineFrame {
+  const dt = f.thickness * thicknessPad;
+  const dl = f.length * lengthPad;
+  return {
+    ...f,
+    origin: { x: f.origin.x - f.u.x * dl - f.d.x * dt, y: f.origin.y - f.u.y * dl - f.d.y * dt },
+    length: f.length + 2 * dl,
+    thickness: f.thickness + 2 * dt,
+  };
+}
+
+/**
  * Paramètres de canvas.setTransform(a, b, c, d, e, f) qui envoient la photo dans le repère de la tranche,
  * avec un zoom `scale` (pixels de sortie par pixel de photo).
  */

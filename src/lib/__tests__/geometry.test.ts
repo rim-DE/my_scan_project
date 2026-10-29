@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boxToQuad, iou, normalizeQuad, orderAround, quadToBox, spineFrame, spineTransform, type Point } from "../geometry";
+import { boxToQuad, iou, normalizeQuad, orderAround, padFrame, quadToBox, spineFrame, spineTransform, type Point } from "../geometry";
 
 /** Applique la transformation canvas (a, b, c, d, e, f) à un point. */
 const apply = (t: number[], p: Point): Point => ({ x: t[0] * p.x + t[2] * p.y + t[4], y: t[1] * p.x + t[3] * p.y + t[5] });
@@ -47,6 +47,17 @@ describe("géométrie", () => {
     expect(bl.y).toBeCloseTo(0);
     expect(tr.x).toBeCloseTo(100);
     expect(tr.y).toBeCloseTo(20);
+  });
+
+  it("ajoute une marge autour de la tranche sans la décentrer", () => {
+    const quad = boxToQuad({ x: 0.4, y: 0.25, w: 0.2, h: 0.5 });
+    const f = padFrame(spineFrame(quad, 100, 200, "bottom_to_top"), 0.1, 0.05);
+    expect(f.thickness).toBeCloseTo(24);
+    expect(f.length).toBeCloseTo(110);
+    // Le coin bas-gauche de la tranche se retrouve à 5 px du bord gauche et 2 px du haut de la vignette.
+    const bl = apply(spineTransform(f), { x: 40, y: 150 });
+    expect(bl.x).toBeCloseTo(5);
+    expect(bl.y).toBeCloseTo(2);
   });
 
   it("redresse une tranche penchée : sa longueur est conservée", () => {

@@ -60,7 +60,7 @@ export function zoomBoxToPhoto(box: number[], area: NormalizedBox): NormalizedBo
  * Chaque livre n'est tenté qu'une fois (refinedAt), même si plusieurs pages lancent le recadrage en même temps.
  */
 export async function refineSpines(scanId: string, budgetMs = 120_000): Promise<number> {
-  if (env.visionProvider() !== "gemini") return 0;
+  if (!env.refineSpines() || env.visionProvider() !== "gemini") return 0;
   const deadline = Date.now() + budgetMs;
   const scan = await prisma.scan.findUniqueOrThrow({ where: { id: scanId }, select: { country: true } });
   const dets = await prisma.detection.findMany({
