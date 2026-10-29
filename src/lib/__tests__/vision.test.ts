@@ -66,19 +66,21 @@ describe("détection", () => {
 
 describe("découpage en bandes", () => {
   it("coupe les grandes photos en 2 ou 3 bandes qui se recouvrent et couvrent toute la largeur", () => {
-    expect(tileLayout(800, 1000)).toEqual([{ left: 0, width: 800 }]);
-    for (const [w, h, n] of [
-      [1456, 2576, 2],
-      [2576, 1456, 3],
-      [2000, 1500, 2],
+    expect(tileLayout(800)).toEqual([{ left: 0, width: 800 }]);
+    for (const [w, n] of [
+      [1456, 2],
+      [2576, 3],
+      [3024, 4],
+      [4032, 5],
+      [8000, 6],
     ]) {
-      const tiles = tileLayout(w, h);
+      const tiles = tileLayout(w);
       expect(tiles).toHaveLength(n);
       expect(tiles[0].left).toBe(0);
       expect(tiles.at(-1)!.left + tiles.at(-1)!.width).toBe(w);
       for (let i = 1; i < tiles.length; i++) {
-        // Recouvrement d'au moins 15 % de la largeur entre deux bandes voisines.
-        expect(tiles[i - 1].left + tiles[i - 1].width - tiles[i].left).toBeGreaterThanOrEqual(Math.round(w * 0.15));
+        // Recouvrement d'au moins 20 % d'une bande entre deux bandes voisines.
+        expect(tiles[i - 1].left + tiles[i - 1].width - tiles[i].left).toBeGreaterThanOrEqual(Math.round(tiles[i].width * 0.2));
       }
     }
   });
