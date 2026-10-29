@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CatalogUnavailableError, lookupByTitle, parseBnfRecords, lookupCacheKey, normalizeText, parseGoogleVolume, parseOpenLibraryDoc, scoreCandidate, similarity, MIN_MATCH_SCORE } from "../books";
+import { CatalogUnavailableError, lookupByTitle, mainTitle, parseBnfRecords, parseSudocRecords, lookupCacheKey, normalizeText, parseGoogleVolume, parseOpenLibraryDoc, scoreCandidate, similarity, MIN_MATCH_SCORE } from "../books";
 
 describe("identification des livres", () => {
   it("normalise le texte (accents, ponctuation)", () => {
@@ -134,16 +134,71 @@ describe("recherche par titre quand Google Books sature", () => {
     await check;
   });
 
-  it("ne renvoie pas « introuvable » quand la recherche Amazon manque de jetons Keepa", async () => {
-    vi.stubEnv("KEEPA_API_KEY", "test");
-    // Les catalogues gratuits ne trouvent rien, et Keepa n'a plus de jetons (429).
+  it("ne renvoie pas « introuvable » quand Gemini ne répond pas", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "test");
+    // Les catalogues gratuits ne trouvent rien, et Gemini est en erreur.
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (url: URL) => (String(url).includes("keepa") ? json({ refillIn: 1000 }, 429) : json({ docs: [] }))),
+      vi.fn(async (url: URL | string) => (String(url).includes("generativelanguage") ? json({}, 400) : json({ docs: [] }))),
     );
-    // Keepa est réessayé une fois après 1 s (vraie attente : l'appel Keepa est chargé à la demande).
     await expect(lookupByTitle({ title: "Atlas zoologique", language: "fr" })).rejects.toBeInstanceOf(CatalogUnavailableError);
     vi.unstubAllEnvs();
+  });
+
+  it("retrouve un livre mal lu grâce à Gemini, confirmé par un catalogue", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "test");
+    const gemini = { candidates: [{ content: { parts: [{ text: JSON.stringify({ title: "L'hypothèse du bonheur", author: "Jonathan Haidt", isbn: "9782870095362", confident: true }) }] } }] };
+    const found = { volumeInfo: { title: "L'hypothèse du bonheur", authors: ["Jonathan Haidt"], language: "fr", industryIdentifiers: [{ type: "ISBN_13", identifier: "9782870095362" }] } };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: URL | string) => {
+        const u = decodeURIComponent(String(url));
+        if (u.includes("generativelanguage")) return json(gemini);
+        if (u.includes("isbn:9782870095362")) return json({ items: [found] });
+        return json({ docs: [] });
+      }),
+    );
+    // « hypothèque » au lieu de « hypothèse » : aucun catalogue ne trouve le titre lu.
+    expect((await lookupByTitle({ title: "L'hypothèque du bonheur", language: "fr" }))?.isbn13).toBe("9782870095362");
+    vi.unstubAllEnvs();
+  });
+
+  it("refuse une proposition de Gemini qu'aucun catalogue ne confirme", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "test");
+    const gemini = { candidates: [{ content: { parts: [{ text: JSON.stringify({ title: "Un livre inventé", author: null, isbn: "9782870095362", confident: true }) }] } }] };
+    vi.stubGlobal("fetch", vi.fn(async (url: URL | string) => (String(url).includes("generativelanguage") ? json(gemini) : json({ docs: [] }))));
+    expect(await lookupByTitle({ title: "Un livre inventé", language: "fr" })).toBeNull();
+    vi.unstubAllEnvs();
+  });
+});
+
+describe("titres avec sous-titre ou deux tranches lues ensemble", () => {
+  const base = { isbn13: "9782000000000", isbn10: null, authors: [], publisher: null, publishedDate: null, language: "fr", pageCount: null, coverUrl: null, listPriceCents: null, source: "amazon" as const };
+
+  it("compare au titre sans son sous-titre", () => {
+    expect(mainTitle("Tout savoir pour maigrir: Ces vérités qu'il faut connaître pour perdre du poids durablement")).toBe("Tout savoir pour maigrir");
+    const c = { ...base, title: "Tout savoir pour maigrir: Ces vérités qu'il faut connaître pour perdre du poids durablement" };
+    expect(scoreCandidate({ title: "TOUT SAVOIR POUR MAIGRIR" }, c)).toBeGreaterThan(0.95);
+  });
+
+  it("reconnaît un des deux livres quand deux tranches voisines ont été lues ensemble", () => {
+    const c = { ...base, title: "Aikido : Initiation" };
+    expect(scoreCandidate({ title: "AIKIDO Initiation LEÇONS D'AIKIDO" }, c)).toBeGreaterThan(MIN_MATCH_SCORE);
+  });
+});
+
+describe("catalogue du Sudoc", () => {
+  it("lit une notice UNIMARC", () => {
+    const xml = `<srw:searchRetrieveResponse><srw:records><srw:record><srw:recordSchema>unimarc</srw:recordSchema><srw:recordData><record>
+      <datafield tag="010" ind1=" " ind2=" "><subfield code="a">2-07-036822-X</subfield></datafield>
+      <datafield tag="101" ind1="0" ind2=" "><subfield code="a">fre</subfield></datafield>
+      <datafield tag="200" ind1="1" ind2=" "><subfield code="a">\u0098L'\u009cAtlas zoologique</subfield><subfield code="e">toutes les espèces</subfield></datafield>
+      <datafield tag="214" ind1=" " ind2="0"><subfield code="c">Bordas</subfield><subfield code="d">DL 1998</subfield></datafield>
+      <datafield tag="700" ind1=" " ind2="1"><subfield code="a">Dupont</subfield><subfield code="b">Jean</subfield></datafield>
+    </record></srw:recordData></srw:record></srw:records></srw:searchRetrieveResponse>`;
+    const [b] = parseSudocRecords(xml);
+    expect(b).toMatchObject({ title: "L'Atlas zoologique", authors: ["Jean Dupont"], publisher: "Bordas", publishedDate: "1998", language: "fr", source: "sudoc" });
+    expect(b.isbn13).toMatch(/^978/);
   });
 });
 
