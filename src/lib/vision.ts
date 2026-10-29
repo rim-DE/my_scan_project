@@ -75,24 +75,19 @@ export interface Tile {
   width: number;
 }
 
-/** Largeur visée pour une bande (pixels de la photo) : une dizaine à une vingtaine de tranches par bande. */
-const TILE_TARGET_WIDTH = 900;
-const MAX_TILES = 6;
-/** Recouvrement entre deux bandes voisines, en part de la largeur d'une bande : bien plus large qu'une tranche. */
-const TILE_OVERLAP = 0.25;
+/** Recouvrement entre deux bandes voisines : plus large qu'une tranche, pour qu'aucun livre ne soit coupé partout. */
+const TILE_OVERLAP = 0.15;
 
 /**
  * Découpe une photo d'étagère en bandes verticales analysées en parallèle : le modèle écrit sa réponse
- * livre par livre, et chaque bande ne contient qu'une partie des livres, donc 5 bandes vont environ 5 fois plus vite
- * qu'une seule grande réponse. Une bande étroite est aussi moins réduite avant d'être lue : les tranches fines restent nettes.
+ * livre par livre, donc 2 ou 3 bandes vont 2 à 3 fois plus vite qu'une seule grande réponse.
  * Les tranches étant surtout verticales, une coupe verticale avec recouvrement les garde entières dans une bande.
  */
-export function tileLayout(width: number): Tile[] {
-  const n = width < 1200 ? 1 : Math.min(MAX_TILES, Math.max(2, Math.ceil(width / TILE_TARGET_WIDTH)));
+export function tileLayout(width: number, height: number): Tile[] {
+  const n = width < 1200 ? 1 : width / height > 1.6 ? 3 : 2;
   if (n === 1) return [{ left: 0, width }];
-  // n bandes de largeur w qui se recouvrent de TILE_OVERLAP × w couvrent toute la photo.
-  const w = Math.ceil(width / (n - TILE_OVERLAP * (n - 1)));
-  const overlap = Math.round(w * TILE_OVERLAP);
+  const overlap = Math.round(width * TILE_OVERLAP);
+  const w = Math.ceil((width + overlap * (n - 1)) / n);
   return Array.from({ length: n }, (_, i) => {
     const left = Math.min(i * (w - overlap), width - w);
     return { left, width: w };
@@ -255,7 +250,7 @@ export async function detectBooks(
     const books = await callModel(small, (f) => SINGLE_PROMPT(f));
     return cleanDetections(books, small);
   }
-  const tiles = tileLayout(size.width);
+  const tiles = tileLayout(size.width, size.height);
   const perTile = await Promise.all(
     tiles.map(async (tile, i) => {
       const crop =
