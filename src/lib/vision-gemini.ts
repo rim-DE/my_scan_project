@@ -39,7 +39,8 @@ function stripSafeIntBounds(node: unknown): unknown {
   return out;
 }
 
-export async function callGemini<T>(jpeg: Buffer, prompt: string, schema: z.ZodType<T>): Promise<T> {
+/** Appel Gemini avec une image, ou texte seul (jpeg = null) : beaucoup moins cher, pour retrouver un livre d'après son titre. */
+export async function callGemini<T>(jpeg: Buffer | null, prompt: string, schema: z.ZodType<T>): Promise<T> {
   const key = env.geminiApiKey();
   if (!key) throw new Error("GEMINI_API_KEY n'est pas configurée.");
   const thinking = env.geminiThinking();
@@ -47,7 +48,7 @@ export async function callGemini<T>(jpeg: Buffer, prompt: string, schema: z.ZodT
     contents: [
       {
         role: "user",
-        parts: [{ inlineData: { mimeType: "image/jpeg", data: jpeg.toString("base64") } }, { text: prompt }],
+        parts: [...(jpeg ? [{ inlineData: { mimeType: "image/jpeg", data: jpeg.toString("base64") } }] : []), { text: prompt }],
       },
     ],
     generationConfig: {

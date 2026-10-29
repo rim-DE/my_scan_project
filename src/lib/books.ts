@@ -15,7 +15,7 @@ export interface BookInfo {
   pageCount: number | null;
   coverUrl: string | null;
   listPriceCents: number | null;
-  source: "google" | "bnf" | "openlibrary" | "amazon";
+  source: "google" | "bnf" | "sudoc" | "openlibrary" | "amazon";
 }
 
 // ---------- Similarité de titres ----------
@@ -93,10 +93,17 @@ export function contradictsTitle(readTitle: string, candidateTitle: string): boo
   return clash((w) => VARIANT_WORDS.has(w)) || clash((w) => /^\d+$/.test(w));
 }
 
+/** Titre sans son sous-titre : « Tout savoir pour maigrir: Ces vérités… » → « Tout savoir pour maigrir ». */
+export function mainTitle(title: string): string {
+  return title.split(/\s*[:(]|\s+[-–]\s+|\s*[.;]\s+/)[0].trim() || title;
+}
+
 export function scoreCandidate(query: TitleQuery, c: BookInfo): number {
   if (contradictsTitle(query.title, c.title)) return 0;
   const authorNames = query.author ? [query.author, ...c.authors] : c.authors;
-  const titleScore = titleSimilarity(query.title, c.title, authorNames);
+  // Amazon et la BnF collent souvent le sous-titre au titre : on compare aussi au titre seul.
+  const main = mainTitle(c.title);
+  const titleScore = Math.max(titleSimilarity(query.title, c.title, authorNames), titleSimilarity(query.title, main, authorNames));
   const authorScore = query.author && c.authors.length > 0 ? Math.max(...c.authors.map((x) => similarity(query.author!, x))) : null;
   const sameEditor = query.publisher ? publisherMatches(query.publisher, c) : false;
   // Un seul mot lu (« Grossesse ») se retrouve dans des dizaines de titres : il faut le titre exact,
@@ -107,7 +114,11 @@ export function scoreCandidate(query: TitleQuery, c: BookInfo): number {
   if (readWords.length === 1 && titleScore < 1 && !sameEditor && !authorOk) return 0;
   // Sans auteur pour confirmer, les deux tiers des mots lus doivent être dans le titre trouvé :
   // « …mbous rustiques » ne doit pas devenir « Les jeux rustiques ».
-  if (!authorOk && readWords.length > 1 && wordCoverage(readWords, c.title) < 2 / 3) return 0;
+  // Sauf quand le titre trouvé (au moins 2 mots) est entièrement dans ce qui a été lu : deux tranches voisines
+  // lues ensemble (« Aikido Initiation Leçons d'aïkido ») contiennent bien « Aikido : Initiation ».
+  const mainWords = [...tokens(main)].filter((w) => !names.has(w));
+  const contained = mainWords.length >= 2 && wordCoverage(mainWords, readWords.join(" ")) === 1;
+  if (!authorOk && !contained && readWords.length > 1 && wordCoverage(readWords, c.title) < 2 / 3) return 0;
   let score = titleScore;
   if (authorScore !== null) score = score * 0.75 + authorScore * 0.25;
   if (sameEditor) score += 0.1;
@@ -293,6 +304,67 @@ async function bnfSearch(title: string, author?: string | null): Promise<BookInf
   return withIsbn.length ? withIsbn : found;
 }
 
+// ---------- Sudoc (catalogue des bibliothèques universitaires françaises) ----------
+// API SRU publique et gratuite : https://abes.fr/guide-utilisation-service-sru-catalogue-sudoc (notices UNIMARC).
+
+/** Lit les notices UNIMARC du Sudoc : 010 ISBN, 101 langue, 200 titre, 210/214 éditeur et date, 700/701 auteurs. */
+export function parseSudocRecords(xml: string): BookInfo[] {
+  const out: BookInfo[] = [];
+  for (const [, rec] of xml.matchAll(/<record(?:\s[^>]*)?>([\s\S]*?)<\/record>/g)) {
+    const fields = (tag: string) =>
+      [...rec.matchAll(new RegExp(`<datafield[^>]*tag="${tag}"[^>]*>([\\s\\S]*?)<\\/datafield>`, "g"))].map((m) => m[1]);
+    const sub = (field: string | undefined, code: string) =>
+      field ? [...field.matchAll(new RegExp(`<subfield[^>]*code="${code}"[^>]*>([\\s\\S]*?)<\\/subfield>`, "g"))].map((m) => xmlText(m[1])) : [];
+    // Le Sudoc entoure les articles ignorés au tri de caractères de contrôle (« ˜Les˜ chats ») : on les enlève.
+    const clean = (s: string) => s.replace(/[\u0098\u009c]/g, "").replace(/\s+/g, " ").trim();
+    const title = clean(sub(fields("200")[0], "a")[0] ?? "");
+    if (!title) continue;
+    const isbn = fields("010")
+      .flatMap((f) => sub(f, "a"))
+      .map((i) => normalizeIsbn(i))
+      .find((x) => x !== null);
+    const authors = [...fields("700"), ...fields("701")].map((f) => [sub(f, "b")[0], sub(f, "a")[0]].filter(Boolean).join(" ").trim()).filter(Boolean);
+    const pub = fields("214")[0] ?? fields("210")[0];
+    const lang = sub(fields("101")[0], "a")[0];
+    out.push({
+      isbn13: isbn?.isbn13 ?? null,
+      isbn10: isbn?.isbn10 ?? null,
+      title,
+      authors,
+      publisher: sub(pub, "c")[0] ?? null,
+      publishedDate: sub(pub, "d")[0]?.replace(/\D/g, "").slice(0, 4) || null,
+      language: lang ? (MARC_LANGUAGES[lang] ?? lang) : null,
+      pageCount: null,
+      coverUrl: null,
+      listPriceCents: null,
+      source: "sudoc",
+    });
+  }
+  return out;
+}
+
+async function sudocQuery(query: string): Promise<BookInfo[]> {
+  const url = new URL("https://www.sudoc.abes.fr/cbs/sru/");
+  url.searchParams.set("operation", "searchRetrieve");
+  url.searchParams.set("version", "1.1");
+  url.searchParams.set("recordSchema", "unimarc");
+  url.searchParams.set("maximumRecords", "15");
+  url.searchParams.set("query", query);
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Sudoc HTTP ${res.status}`);
+  const found = parseSudocRecords(await res.text());
+  const withIsbn = found.filter((b) => b.isbn13);
+  return withIsbn.length ? withIsbn : found;
+}
+
+/** Mots du titre (et nom de l'auteur) : le Sudoc cherche les notices qui contiennent tous ces mots. */
+function sudocSearch(title: string, author?: string | null): Promise<BookInfo[]> {
+  const words = [...tokens(title)].filter((w) => w.length > 1).slice(0, 8);
+  const surname = author ? normalizeText(author).split(" ").at(-1) : "";
+  if (words.length === 0) return Promise.resolve([]);
+  return sudocQuery([...words.map((w) => `mti=${w}`), ...(surname ? [`aut=${surname}`] : [])].join(" and "));
+}
+
 // ---------- API publique ----------
 
 /**
@@ -310,10 +382,18 @@ export async function lookupByIsbn(isbn13: string): Promise<BookInfo | null> {
   }
   try {
     const ol = await openLibrarySearch({ isbn: isbn13 });
+    reachable = true;
     if (ol[0]) return { ...ol[0], isbn13 };
-    return null;
   } catch (e) {
     console.warn("[books] Open Library indisponible", e);
+  }
+  // Les livres français rares ou anciens sont souvent seulement au Sudoc.
+  try {
+    const sd = await sudocQuery(`isb=${isbn13}`);
+    if (sd[0]) return { ...sd[0], isbn13 };
+    return null;
+  } catch (e) {
+    console.warn("[books] Sudoc indisponible", e);
     if (!reachable) throw new CatalogUnavailableError();
     return null;
   }
@@ -338,85 +418,88 @@ function pickBest(query: TitleQuery, candidates: BookInfo[]): BookInfo | null {
   return bestScore >= MIN_MATCH_SCORE ? best : null;
 }
 
-export async function lookupByTitle(query: TitleQuery & { language?: string }): Promise<BookInfo | null> {
-  // Les parenthèses et guillemets du titre lu (« Survivre sans écrans (quand on est ado) ») gênent les moteurs de recherche.
-  const clean = (s: string) => s.replace(/[()[\]"«»]/g, " ").replace(/\s+/g, " ").trim();
-  query = { ...query, title: clean(query.title) };
+/**
+ * Cherche le titre dans les catalogues gratuits : Google Books, BnF, Sudoc, Open Library.
+ * `failed` : un catalogue n'a pas répondu (on ne pourra pas conclure « introuvable »).
+ */
+async function searchCatalogs(query: TitleQuery & { language?: string }): Promise<{ found: BookInfo | null; failed: boolean }> {
   // Un titre d'un seul mot ne suffit pas à Google : on précise l'éditeur lu sur la tranche.
   const oneWord = oneWordTitle(query);
   const q =
     `intitle:${query.title}` +
     (query.author ? ` inauthor:${query.author}` : "") +
-    (oneWord && query.publisher ? ` inpublisher:${clean(query.publisher)}` : "");
-  let googleFailed = false;
+    (oneWord && query.publisher ? ` inpublisher:${cleanQuery(query.publisher)}` : "");
+  let failed = false;
   try {
     let found = pickBest(query, await googleSearch(q, query.language));
     if (!found && query.language) found = pickBest(query, await googleSearch(q));
-    if (found) return found;
+    if (found) return { found, failed };
   } catch (e) {
-    googleFailed = true;
+    failed = true;
     console.warn("[books] Google Books indisponible", e);
   }
-  // La BnF connaît presque tous les livres publiés en France.
-  let bnfFailed = false;
-  try {
-    let found = pickBest(query, await bnfSearch(query.title, query.author));
-    // Un auteur mal lu sur la tranche ne doit pas tout bloquer : on réessaie avec le titre seul.
-    if (!found && query.author) found = pickBest(query, await bnfSearch(query.title));
-    if (found) return found;
-  } catch (e) {
-    bnfFailed = true;
-    console.warn("[books] BnF indisponible", e);
+  // La BnF connaît presque tous les livres publiés en France ; le Sudoc, les livres plus rares ou spécialisés.
+  // Un auteur mal lu sur la tranche ne doit pas tout bloquer : on réessaie avec le titre seul.
+  for (const [name, search] of [
+    ["BnF", bnfSearch],
+    ["Sudoc", sudocSearch],
+  ] as const) {
+    try {
+      let found = pickBest(query, await search(query.title, query.author));
+      if (!found && query.author) found = pickBest(query, await search(query.title));
+      if (found) return { found, failed };
+    } catch (e) {
+      failed = true;
+      console.warn(`[books] ${name} indisponible`, e);
+    }
   }
   const params: Record<string, string> = { title: query.title };
   if (query.author) params.author = query.author;
-  let found: BookInfo | null = null;
   try {
-    found = pickBest(query, await openLibrarySearch(params));
+    return { found: pickBest(query, await openLibrarySearch(params)), failed };
   } catch (e) {
     console.warn("[books] Open Library indisponible", e);
-    if (googleFailed && bnfFailed) throw new CatalogUnavailableError();
+    return { found: null, failed: true };
   }
-  let amazonFailed = false;
-  if (!found) found = await amazonSearch(query).catch(() => ((amazonFailed = true), null));
-  // Un catalogue (ou Amazon, faute de jetons Keepa) n'a pas répondu et les autres ne trouvent rien :
-  // on ne conclut pas « introuvable », pour ne pas le garder en cache ; la recherche sera relancée plus tard.
-  if (!found && (googleFailed || bnfFailed || amazonFailed)) throw new CatalogUnavailableError();
+}
+
+// Les parenthèses et guillemets du titre lu (« Survivre sans écrans (quand on est ado) ») gênent les moteurs de recherche.
+const cleanQuery = (s: string) => s.replace(/[()[\]"«»]/g, " ").replace(/\s+/g, " ").trim();
+
+export async function lookupByTitle(query: TitleQuery & { language?: string }): Promise<BookInfo | null> {
+  query = { ...query, title: cleanQuery(query.title) };
+  const first = await searchCatalogs(query);
+  if (first.found) return first.found;
+  // Dernier recours (au lieu d'une recherche Amazon à 10 jetons Keepa) : Gemini, en texte seul, reconnaît le livre
+  // malgré une lecture imparfaite ; sa réponse n'est gardée que si un catalogue la confirme.
+  let hintFailed = false;
+  const found = await bookFromHint(query).catch((e) => {
+    hintFailed = true;
+    console.warn("[books] Gemini indisponible", e);
+    return null;
+  });
+  // Un catalogue (ou Gemini) n'a pas répondu et les autres ne trouvent rien : on ne conclut pas « introuvable »,
+  // pour ne pas le garder en cache ; la recherche sera relancée plus tard.
+  if (!found && (first.failed || hintFailed)) throw new CatalogUnavailableError();
   return found;
 }
 
-/**
- * Dernier recours : la fiche Amazon (via Keepa, 10 jetons), comme BiblioScan.
- * Seulement si le titre a été lu (pas « Auteur (titre illisible) »).
- */
-async function amazonSearch(query: TitleQuery): Promise<BookInfo | null> {
-  if (!env.keepaApiKey() || /illisible/i.test(query.title)) return null;
-  if (titleSimilarity(query.title, query.title, query.author ? [query.author] : []) === 0) return null;
-  try {
-    const { keepaSearch, keepaBookInfo } = await import("./prices/providers/keepa");
-    const candidates = (await keepaSearch(oneWordTitle(query) && query.publisher ? `${query.title} ${query.publisher}` : query.title, query.author)).flatMap((p) => {
-      const info = keepaBookInfo(p);
-      if (!info) return [];
-      const norm = info.isbn13 ? normalizeIsbn(info.isbn13) : null;
-      return [
-        {
-          ...info,
-          isbn13: norm?.isbn13 ?? null,
-          isbn10: norm?.isbn10 ?? null,
-          publishedDate: null,
-          language: null,
-          pageCount: null,
-          listPriceCents: null,
-          source: "amazon" as const,
-        },
-      ];
-    });
-    return pickBest(query, candidates);
-  } catch (e) {
-    // Souvent plus de jetons Keepa : l'appelant ne doit pas en conclure que le livre est introuvable.
-    console.warn("[books] recherche Amazon impossible", e);
-    throw new CatalogUnavailableError();
+/** Livre proposé par Gemini, confirmé par un catalogue (par son ISBN, sinon par son titre corrigé). */
+async function bookFromHint(query: TitleQuery & { language?: string }): Promise<BookInfo | null> {
+  if (/illisible/i.test(query.title) || !env.geminiApiKey()) return null;
+  const { suggestBook } = await import("./book-hint");
+  const hint = await suggestBook(query);
+  if (!hint) return null;
+  const hinted = { title: hint.title, author: hint.author, language: query.language };
+  // Le livre trouvé doit correspondre à la proposition de Gemini, sans contredire la tranche (« grand » ≠ « petit »).
+  const confirms = (c: BookInfo | null) =>
+    c && scoreCandidate(hinted, c) >= MIN_MATCH_SCORE && !contradictsTitle(query.title, c.title) ? c : null;
+  const isbn = hint.isbn ? normalizeIsbn(hint.isbn) : null;
+  if (isbn) {
+    const byIsbn = confirms(await lookupByIsbn(isbn.isbn13).catch(() => null));
+    if (byIsbn) return byIsbn;
   }
+  return confirms((await searchCatalogs({ ...hinted, title: cleanQuery(hinted.title) })).found);
 }
 
 function oneWordTitle(query: TitleQuery): boolean {
@@ -424,6 +507,6 @@ function oneWordTitle(query: TitleQuery): boolean {
 }
 
 export function lookupCacheKey(title: string, author: string | null | undefined, language: string, publisher?: string | null): string {
-  // "v9" : on oublie les correspondances qui contredisaient le titre lu (« Grand Larousse » pris pour « Petit Larousse »).
-  return `v9|${language}|${normalizeText(title)}|${normalizeText(author ?? "")}|${normalizeText(publisher ?? "")}`;
+  // "v10" : on réessaie les livres « introuvables » avec le Sudoc, les sous-titres et Gemini.
+  return `v10|${language}|${normalizeText(title)}|${normalizeText(author ?? "")}|${normalizeText(publisher ?? "")}`;
 }
