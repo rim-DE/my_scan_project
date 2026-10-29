@@ -13,6 +13,11 @@ export type { NormalizedBox } from "./geometry";
 const CornerSchema = z.object({ x: z.number().int(), y: z.number().int() });
 
 export const DetectedBookSchema = z.object({
+  // En premier : le modèle décide de l'étagère avant de lire le titre, ce qui l'oblige à parcourir la photo rangée par rangée.
+  shelf: z
+    .number()
+    .int()
+    .describe("Numéro de l'étagère (ou de la pile), compté depuis le haut de la photo : 1 = la plus haute"),
   title: z.string().describe("Titre lu sur la tranche ou la couverture"),
   author: z.string().nullable().describe("Auteur si lisible, sinon null"),
   publisher: z.string().nullable().describe("Éditeur ou collection si lisible, sinon null"),
@@ -167,6 +172,15 @@ const frameLines = (f: Frame) =>
 const SHELF_PROMPT = (language: string, f: Frame) => `Tu analyses la photo d'une ou plusieurs étagères ou piles de livres.
 Sois EXHAUSTIF : repère chaque livre dont on peut lire au moins un mot sur la tranche ou la couverture (titre, auteur ou éditeur),
 y compris les livres fins, penchés, couchés à plat, sur un meuble voisin ou coupés par le bord de la photo.
+
+Méthode, à suivre dans l'ordre, sans sauter d'étape :
+1. Repère d'abord toutes les étagères (ou piles) de la photo et numérote-les de haut en bas : 1 = la plus haute.
+2. Prends l'étagère 1 et parcours-la de gauche à droite, tranche après tranche, sans en sauter aucune :
+   chaque tranche dont un mot est lisible devient un livre de la liste, dans cet ordre.
+3. Quand tu arrives au bout à droite, passe à l'étagère suivante (2, puis 3…) et recommence à gauche.
+4. Une pile de livres couchés se lit de haut en bas, livre par livre.
+5. À la fin, reprends chaque étagère et vérifie qu'aucune tranche lisible n'a été oubliée, surtout les tranches fines
+   et celles collées à une tranche de même couleur ; ajoute celles qui manquent à leur place.
 Deux tranches voisines de la même couleur sont deux livres distincts : sépare-les dès que le texte, la police, l'éditeur
 ou le sens de lecture change, et ne réunis jamais deux livres dans une même forme.
 Les livres sont majoritairement en ${LANGUAGE_NAMES[language] ?? language}.
@@ -188,11 +202,14 @@ Pour chaque livre :
   ou "right_to_left" (horizontal mais à l'envers, par exemple un livre couché tête-bêche dans une pile) ;
 - "confidence" : "high" si le titre est net, "medium" si partiellement lisible, "low" si tu devines.
 
-Ignore les livres dont aucun texte n'est lisible. Liste-les de gauche à droite, étagère par étagère, de haut en bas.`;
+- "shelf" : le numéro de l'étagère où se trouve le livre (étape 1).
+
+Ignore les livres dont aucun texte n'est lisible. La liste suit l'ordre de la méthode : étagère 1 de gauche à droite,
+puis étagère 2 de gauche à droite, et ainsi de suite jusqu'en bas.`;
 
 const SINGLE_PROMPT = (f: Frame) => `Cette photo montre un seul livre (couverture, dos ou code-barres).
 Lis le titre, l'auteur, l'éditeur et l'ISBN s'il est visible (souvent sous le code-barres, commence par 978 ou 979).
-Retourne exactement un élément dans "books" (ou aucun si ce n'est pas un livre).
+Retourne exactement un élément dans "books" (ou aucun si ce n'est pas un livre), avec "shelf" = 1.
 Pour "corners", donne les 4 coins du livre, ordre haut-gauche, haut-droit, bas-droit, bas-gauche. ${frameLines(f).coords}.`;
 
 let client: Anthropic | null = null;

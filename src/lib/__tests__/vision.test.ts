@@ -11,6 +11,7 @@ const quad = (x0: number, y0: number, x1: number, y1: number) => [
 ];
 
 const book = (over: Partial<DetectedBook>): DetectedBook => ({
+  shelf: 1,
   title: "Festival Fairy Tales",
   author: null,
   publisher: null,
