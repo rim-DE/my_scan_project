@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { env } from "../env";
-import { DetectionResultSchema } from "../vision";
+import { boxToCorners, DetectionResultSchema, GeminiDetectionResultSchema } from "../vision";
 import { geminiSchema, parseGeminiJson } from "../vision-gemini";
 
 describe("geminiSchema", () => {
@@ -10,6 +10,26 @@ describe("geminiSchema", () => {
     expect(s).not.toContain("9007199254740991");
     expect(s).toContain('"corners"');
     expect(s).toContain('"type":["string","null"]');
+  });
+});
+
+describe("rectangle Gemini", () => {
+  it("demande box_2d au lieu des 4 coins", () => {
+    const s = JSON.stringify(geminiSchema(GeminiDetectionResultSchema));
+    expect(s).toContain('"box_2d"');
+    expect(s).not.toContain('"corners"');
+  });
+
+  it("convertit [ymin, xmin, ymax, xmax] de 0-1000 en 4 coins en pixels, même dans le désordre", () => {
+    const expected = [
+      { x: 200, y: 200 },
+      { x: 260, y: 200 },
+      { x: 260, y: 1800 },
+      { x: 200, y: 1800 },
+    ];
+    expect(boxToCorners([100, 200, 900, 260], 1000, 2000)).toEqual(expected);
+    expect(boxToCorners([900, 260, 100, 200], 1000, 2000)).toEqual(expected);
+    expect(boxToCorners([1, 2, 3], 1000, 2000)).toEqual([]);
   });
 });
 
