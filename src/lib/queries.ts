@@ -7,7 +7,7 @@ import { priceStatus, type PriceStatus } from "./prices/status";
 import type { BadgeStats } from "./badges";
 import type { Prisma } from "@prisma/client";
 import type { NormalizedBox, Point, TextDirection } from "./geometry";
-import { computeMetrics, type BookMetrics } from "./prices/metrics";
+import { computeMetrics, dropAberrantPrices, type BookMetrics } from "./prices/metrics";
 
 export interface PriceRow {
   id: string;
@@ -48,7 +48,11 @@ type BookWithPrices = Prisma.BookGetPayload<{ include: { prices: true } }> & {
 };
 
 export function toBookView(book: BookWithPrices, country: string): BookView {
-  const snaps = book.prices.filter((p) => p.country === country);
+  // Les offres « bouche-trou » (2 034 €…) faussent la médiane et le BiblioRank : on les ignore.
+  const snaps = dropAberrantPrices(
+    book.prices.filter((p) => p.country === country),
+    book.listPriceCents,
+  );
   const rows: PriceRow[] = snaps
     .map((p) => ({
       id: p.id,

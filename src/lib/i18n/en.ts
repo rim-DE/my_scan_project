@@ -164,7 +164,7 @@ export const en: Dict = {
     refreshPrices: "Refresh prices",
     demoWarning: "Demo data (fake) — PRICE_DEMO_MODE is on.",
     publisherPrice: "List price",
-    biblioRankHelp: "Score from 0 to 100: net profit × chance of selling your copy within 3 months (Amazon sales shared between sellers), with buyback as a floor.",
+    biblioRankHelp: "Score from 0 to 100: net profit × chance of selling within 3 months (recent sales count more). It drops fast when the last sale is old, stays at 5 or less with no sale in 12 months, and buyback is a floor.",
     inStock: "Already in stock",
     banger: "Banger",
     bangerHelp: "Worth reselling: price ≥ €35, at least 3 sales in 12 months, ratio ≥ 1.2, and no current offer or one ≥ €27.",

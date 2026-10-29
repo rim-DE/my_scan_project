@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { biblioRank, computeMetrics, isInteresting, shortAge, type SalePoint } from "../prices/metrics";
+import { biblioRank, computeMetrics, dropAberrantPrices, isInteresting, shortAge, type SalePoint } from "../prices/metrics";
 import { computeStats } from "../prices/stats";
 
 const NOW = new Date("2026-10-25T12:00:00Z");
@@ -50,7 +50,8 @@ describe("indicateurs façon BiblioScan", () => {
     const m = computeMetrics(points, stats, { listPriceCents: 2100, sales12m: 0, sales30d: 0 }, NOW);
     const pace = 5 / (870 / 30.44);
     expect(m.weightedProfit30dCents).toBe(Math.round(stats.netAfterFeesCents! * pace));
-    expect(m.biblioRank).toBeGreaterThan(0);
+    // Pas de vente sur 12 mois : le BiblioRank reste au plancher, même si le profit pondéré existe.
+    expect(m.biblioRank).toBeLessThanOrEqual(5);
   });
 
   it("sans information de ventes, pas de profit pondéré", () => {
@@ -81,23 +82,53 @@ describe("nombre d'offres", () => {
 });
 
 describe("BiblioRank", () => {
-  it("classe d'abord le livre qui rapporte ET se vend vite", () => {
-    // Power : 15 € net, 126 ventes/an, 14 offres → beaucoup mieux qu'un livre à 18 € qui se vend peu face à 16 offres.
-    const power = biblioRank({ netAfterFeesCents: 1500, sales12m: 126, offerCount: 14, buybackCents: null });
-    const slow = biblioRank({ netAfterFeesCents: 1791, sales12m: 25, offerCount: 16, buybackCents: null });
-    expect(power.biblioRank!).toBeGreaterThan(slow.biblioRank!);
-    expect(power.expected90dCents).toBe(1316);
-    expect(power.biblioRank).toBe(73);
-    expect(slow.biblioRank).toBe(42);
+  it("classe d'abord le livre qui rapporte ET se vend en ce moment", () => {
+    // Bouger en accouchant (export BiblioScan) : 13,67 € net, 29 ventes/an dont 14 en 6 mois, vendu il y a 5 jours.
+    const fast = biblioRank({ netAfterFeesCents: 1367, sales12m: 29, sales6m: 14, sales30d: 4, monthsSinceLastSale: 0.2, buybackCents: null });
+    // 18 € net mais 1 vente par an, il y a 11 mois.
+    const slow = biblioRank({ netAfterFeesCents: 1800, sales12m: 1, sales6m: 0, sales30d: 0, monthsSinceLastSale: 11, buybackCents: null });
+    expect(fast.biblioRank).toBe(75);
+    expect(slow.biblioRank!).toBeLessThan(5);
   });
 
-  it("vaut 0 sans vente, sauf si un site de rachat sert de plancher", () => {
-    expect(biblioRank({ netAfterFeesCents: 7388, sales12m: 0, offerCount: 2, buybackCents: null })).toEqual({ expected90dCents: 0, biblioRank: 0 });
-    expect(biblioRank({ netAfterFeesCents: 7388, sales12m: 0, offerCount: 2, buybackCents: 751 }).expected90dCents).toBe(751);
+  it("plafonne à 5 un livre sans vente sur 12 mois, même très cher ou avec un rachat", () => {
+    // Les Ferrari : 55 € net, dernières ventes il y a plus de 4 ans.
+    expect(biblioRank({ netAfterFeesCents: 5516, sales12m: 0, sales6m: 0, sales30d: 0, monthsSinceLastSale: 51, buybackCents: null })).toEqual({
+      expected90dCents: 0,
+      biblioRank: 0,
+    });
+    // Prix médian de 2 000 € : toujours pas en tête de liste.
+    expect(biblioRank({ netAfterFeesCents: 199000, sales12m: 0, monthsSinceLastSale: 14, buybackCents: null }).biblioRank!).toBeLessThanOrEqual(5);
+    const buyback = biblioRank({ netAfterFeesCents: 7388, sales12m: 0, buybackCents: 751 });
+    expect(buyback.expected90dCents).toBe(751);
+    expect(buyback.biblioRank).toBe(5);
+  });
+
+  it("fait fondre le score quand la dernière vente est ancienne", () => {
+    const base = { netAfterFeesCents: 3000, sales12m: 3, sales6m: 1, sales30d: 0, buybackCents: null };
+    const recent = biblioRank({ ...base, monthsSinceLastSale: 2 }).biblioRank!;
+    const old = biblioRank({ ...base, monthsSinceLastSale: 9 }).biblioRank!;
+    expect(old).toBeLessThan(recent / 2);
   });
 
   it("n'invente pas de score sans nombre de ventes ni rachat", () => {
-    expect(biblioRank({ netAfterFeesCents: 1500, sales12m: null, offerCount: null, buybackCents: null })).toEqual({ expected90dCents: null, biblioRank: null });
+    expect(biblioRank({ netAfterFeesCents: 1500, sales12m: null, buybackCents: null })).toEqual({ expected90dCents: null, biblioRank: null });
+  });
+});
+
+describe("prix aberrants", () => {
+  it("ignore les offres et ventes à plus de 5 × le prix éditeur, garde le rachat", () => {
+    const pts = [
+      { offerType: "USED", priceCents: 1500 },
+      { offerType: "SOLD", priceCents: 203400 },
+      { offerType: "BUYBACK", priceCents: 300 },
+    ];
+    expect(dropAberrantPrices(pts, 1690).map((p) => p.priceCents)).toEqual([1500, 300]);
+  });
+
+  it("sans prix éditeur, compare à la médiane des prix du livre", () => {
+    const pts = [1500, 1600, 1700, 203400].map((priceCents) => ({ offerType: "SOLD", priceCents }));
+    expect(dropAberrantPrices(pts, null).map((p) => p.priceCents)).toEqual([1500, 1600, 1700]);
   });
 });
 

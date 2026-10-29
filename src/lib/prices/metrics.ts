@@ -1,5 +1,5 @@
 // Indicateurs "façon BiblioScan" calculés à partir des prix et des ventes connus d'un livre.
-import type { PriceStats } from "./stats";
+import { median, type PriceStats } from "./stats";
 import type { OfferType } from "./types";
 
 export interface SalePoint {
@@ -57,29 +57,56 @@ export function isInteresting(x: { medianCents: number | null; sales12m: number 
 
 /** Échelle du score : un gain espéré de 10 € donne environ 63/100, 20 € environ 86/100. */
 const RANK_SCALE_CENTS = 1000;
+/** Sans aucune vente sur 12 mois, le score ne dépasse jamais 5, quel que soit le prix. */
+const NO_SALE_MAX_RANK = 5;
 
 /**
- * « BiblioRank » maison : combien tu gagnes × à quelle vitesse ton exemplaire part.
- * - ventes par mois partagées entre les vendeurs en place (+ toi) : plus il y a d'offres, plus c'est lent ;
- * - chance de vendre en 3 mois = 1 − e^(−3 × ventes mensuelles pour ton exemplaire) ;
+ * « BiblioRank » maison : combien tu gagnes × à quelle vitesse le livre part en ce moment.
+ * - rythme récent : les ventes des 6 derniers mois pèsent plus (0,6 × ventes 6 mois / 6 + 0,4 × ventes 12 mois / 12),
+ *   et au moins le nombre de ventes des 30 derniers jours par mois ;
+ * - chance de vendre en 3 mois = 1 − e^(−3 × rythme mensuel) ;
+ * - fraîcheur : au-delà de 3 mois sans vente, le gain espéré fond (÷ e tous les 4 mois) ;
+ * - 0 vente sur 12 mois : score plafonné à 5 ;
  * - un prix de rachat (Momox…) est un gain sûr : il sert de plancher.
  * Sans nombre de ventes connu (pas de Keepa) ni rachat, pas de score.
  */
 export function biblioRank(input: {
   netAfterFeesCents: number | null;
   sales12m: number | null;
-  offerCount: number | null;
+  sales6m?: number | null;
+  sales30d?: number | null;
+  /** Mois écoulés depuis la dernière vente connue (null : aucune). */
+  monthsSinceLastSale?: number | null;
   buybackCents: number | null;
 }): { expected90dCents: number | null; biblioRank: number | null } {
-  const { netAfterFeesCents: net, sales12m, offerCount, buybackCents } = input;
+  const { netAfterFeesCents: net, sales12m, buybackCents } = input;
   let expected: number | null = null;
   if (net !== null && sales12m !== null) {
-    const myMonthlySales = sales12m / 12 / ((offerCount ?? 0) + 1);
-    expected = Math.round(net * (1 - Math.exp(-3 * myMonthlySales)));
+    const s6 = Math.min(input.sales6m ?? sales12m / 2, sales12m);
+    const pace = Math.max(0.6 * (s6 / 6) + 0.4 * (sales12m / 12), input.sales30d ?? 0);
+    const since = input.monthsSinceLastSale ?? (sales12m > 0 ? 0 : Infinity);
+    const freshness = since <= 3 ? 1 : Math.exp(-(since - 3) / 4);
+    expected = Math.round(Math.max(0, net) * (1 - Math.exp(-3 * pace)) * freshness);
   }
   if (buybackCents !== null) expected = Math.max(expected ?? 0, buybackCents);
   if (expected === null) return { expected90dCents: null, biblioRank: null };
-  return { expected90dCents: expected, biblioRank: Math.round(100 * (1 - Math.exp(-expected / RANK_SCALE_CENTS))) };
+  let rank = Math.round(100 * (1 - Math.exp(-expected / RANK_SCALE_CENTS)));
+  if (sales12m === 0) rank = Math.min(rank, NO_SALE_MAX_RANK);
+  return { expected90dCents: expected, biblioRank: rank };
+}
+
+/** Un prix plus de 5 fois au-dessus de la référence est une offre « bouche-trou » (2 034 €…), pas un vrai prix. */
+const ABERRANT_FACTOR = 5;
+
+/**
+ * Retire les prix aberrants (offres et ventes) : au-delà de 5 × le prix éditeur, ou à défaut
+ * 5 × la médiane de tous les prix du livre. Les prix de rachat ne sont jamais retirés.
+ */
+export function dropAberrantPrices<T extends { offerType: string; priceCents: number }>(points: T[], listPriceCents?: number | null): T[] {
+  const priced = points.filter((p) => p.offerType !== "BUYBACK").map((p) => p.priceCents);
+  const ref = listPriceCents && listPriceCents > 0 ? listPriceCents : median(priced);
+  if (!ref) return points;
+  return points.filter((p) => p.offerType === "BUYBACK" || p.priceCents <= ref * ABERRANT_FACTOR);
 }
 
 const DAY = 24 * 3600 * 1000;
@@ -115,11 +142,13 @@ export function computeMetrics(
     stats.medianCents !== null && book.listPriceCents ? Math.round((stats.medianCents / book.listPriceCents) * 100) / 100 : null;
 
   const currentOfferCount = book.offerCount ?? offers.length;
+  const sales6m = sold.filter((p) => now.getTime() - p.soldAt.getTime() <= 182 * DAY).length;
   const rank = biblioRank({
     netAfterFeesCents: stats.netAfterFeesCents,
-    // Le même rythme de ventes que pour le profit pondéré.
-    sales12m: perMonth !== null ? perMonth * 12 : null,
-    offerCount: currentOfferCount,
+    sales12m,
+    sales6m: sales12m !== null ? Math.min(sales6m, sales12m) : null,
+    sales30d,
+    monthsSinceLastSale: allSold.length ? (now.getTime() - allSold[0].soldAt.getTime()) / (30.44 * DAY) : null,
     buybackCents: stats.buybackMaxCents,
   });
 

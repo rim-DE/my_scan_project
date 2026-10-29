@@ -4,6 +4,7 @@ import { getLocale } from "@/lib/i18n/server";
 import { getDict } from "@/lib/i18n";
 import { computeStats, estimateForCondition } from "@/lib/prices/stats";
 import { resaleSettings } from "@/lib/prices";
+import { dropAberrantPrices } from "@/lib/prices/metrics";
 import { formatPrice } from "@/lib/money";
 import { StockRow } from "@/components/StockRow";
 
@@ -19,7 +20,7 @@ export default async function StockPage() {
   });
 
   const rows = items.map((i) => {
-    const est = estimateForCondition(computeStats(i.book.prices, resaleSettings()), i.condition);
+    const est = estimateForCondition(computeStats(dropAberrantPrices(i.book.prices, i.book.listPriceCents), resaleSettings()), i.condition);
     return { item: i, est };
   });
   const inStock = rows.filter((r) => r.item.status !== "SOLD");
