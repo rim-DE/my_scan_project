@@ -80,7 +80,8 @@ const VARIANT_WORDS = new Set(["petit", "petite", "grand", "grande", "mini", "ma
 
 /**
  * Le titre trouvé contredit le titre lu : il porte un autre qualificatif (« petit » au lieu de « grand »)
- * ou un autre numéro (« tome 2 » au lieu de « tome 3 »), sans celui qui a été lu.
+ * ou un autre numéro (« tome 2 » au lieu de « tome 3 »), sans celui qui a été lu ; ou bien son titre principal
+ * contient un nombre absent de la tranche (« Les 13 clés… », « 100 chats… »), sauf une année d'édition.
  */
 export function contradictsTitle(readTitle: string, candidateTitle: string): boolean {
   const read = tokens(readTitle);
@@ -90,7 +91,9 @@ export function contradictsTitle(readTitle: string, candidateTitle: string): boo
     const f = [...found].filter(isKind);
     return r.length > 0 && f.length > 0 && !r.some((w) => found.has(w));
   };
-  return clash((w) => VARIANT_WORDS.has(w)) || clash((w) => /^\d+$/.test(w));
+  const isYear = (w: string) => /^(18|19|20)\d\d$/.test(w);
+  const extraNumber = [...tokens(mainTitle(candidateTitle))].some((w) => /^\d+$/.test(w) && !isYear(w) && !read.has(w));
+  return clash((w) => VARIANT_WORDS.has(w)) || clash((w) => /^\d+$/.test(w)) || extraNumber;
 }
 
 /** Titre sans son sous-titre : « Tout savoir pour maigrir: Ces vérités… » → « Tout savoir pour maigrir ». */
@@ -491,9 +494,18 @@ async function bookFromHint(query: TitleQuery & { language?: string }): Promise<
   const hint = await suggestBook(query);
   if (!hint) return null;
   const hinted = { title: hint.title, author: hint.author, language: query.language };
-  // Le livre trouvé doit correspondre à la proposition de Gemini, sans contredire la tranche (« grand » ≠ « petit »).
+  // Le livre trouvé doit correspondre à la proposition de Gemini, sans contredire la tranche (« grand » ≠ « petit »),
+  // et garder au moins la moitié des mots lus : « Les cuirassés français de 35000 tonnes » ne devient pas
+  // « Les cuirassés Dunkerque - Strasbourg », un autre livre du même sujet.
+  const names = new Set((query.author ? [query.author] : []).flatMap((n) => [...tokens(n)]));
+  const readWords = [...tokens(query.title)].filter((w) => !names.has(w));
   const confirms = (c: BookInfo | null) =>
-    c && scoreCandidate(hinted, c) >= MIN_MATCH_SCORE && !contradictsTitle(query.title, c.title) ? c : null;
+    c &&
+    scoreCandidate(hinted, c) >= MIN_MATCH_SCORE &&
+    !contradictsTitle(query.title, c.title) &&
+    (readWords.length === 0 || wordCoverage(readWords, c.title) >= 0.5)
+      ? c
+      : null;
   const isbn = hint.isbn ? normalizeIsbn(hint.isbn) : null;
   if (isbn) {
     const byIsbn = confirms(await lookupByIsbn(isbn.isbn13).catch(() => null));
@@ -507,6 +519,6 @@ function oneWordTitle(query: TitleQuery): boolean {
 }
 
 export function lookupCacheKey(title: string, author: string | null | undefined, language: string, publisher?: string | null): string {
-  // "v10" : on réessaie les livres « introuvables » avec le Sudoc, les sous-titres et Gemini.
-  return `v10|${language}|${normalizeText(title)}|${normalizeText(author ?? "")}|${normalizeText(publisher ?? "")}`;
+  // "v11" : on oublie les livres « corrigés » par Gemini qui ne gardaient pas assez de mots de la tranche.
+  return `v11|${language}|${normalizeText(title)}|${normalizeText(author ?? "")}|${normalizeText(publisher ?? "")}`;
 }

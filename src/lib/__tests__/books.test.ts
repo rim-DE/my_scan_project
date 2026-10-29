@@ -163,6 +163,23 @@ describe("recherche par titre quand Google Books sature", () => {
     vi.unstubAllEnvs();
   });
 
+  it("refuse une proposition de Gemini qui garde trop peu des mots lus (un autre livre du même sujet)", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "test");
+    const gemini = { candidates: [{ content: { parts: [{ text: JSON.stringify({ title: "Les cuirassés Dunkerque et Strasbourg", author: "Robert Dumas", isbn: "9782870095362", confident: true }) }] } }] };
+    const found = { volumeInfo: { title: "Les Cuirasses Dunkerque - Strasbourg", authors: ["Robert Dumas"], language: "fr", industryIdentifiers: [{ type: "ISBN_13", identifier: "9782870095362" }] } };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: URL | string) => {
+        const u = decodeURIComponent(String(url));
+        if (u.includes("generativelanguage")) return json(gemini);
+        if (u.includes("isbn:9782870095362")) return json({ items: [found] });
+        return json({ docs: [] });
+      }),
+    );
+    expect(await lookupByTitle({ title: "LES CUIRASSÉS FRANÇAIS DE 35000 TONNES", language: "fr" })).toBeNull();
+    vi.unstubAllEnvs();
+  });
+
   it("refuse une proposition de Gemini qu'aucun catalogue ne confirme", async () => {
     vi.stubEnv("GEMINI_API_KEY", "test");
     const gemini = { candidates: [{ content: { parts: [{ text: JSON.stringify({ title: "Un livre inventé", author: null, isbn: "9782870095362", confident: true }) }] } }] };
@@ -179,6 +196,13 @@ describe("titres avec sous-titre ou deux tranches lues ensemble", () => {
     expect(mainTitle("Tout savoir pour maigrir: Ces vérités qu'il faut connaître pour perdre du poids durablement")).toBe("Tout savoir pour maigrir");
     const c = { ...base, title: "Tout savoir pour maigrir: Ces vérités qu'il faut connaître pour perdre du poids durablement" };
     expect(scoreCandidate({ title: "TOUT SAVOIR POUR MAIGRIR" }, c)).toBeGreaterThan(0.95);
+  });
+
+  it("refuse un titre avec un nombre absent de la tranche (sauf une année)", () => {
+    expect(scoreCandidate({ title: "les clés du bien-être au quotidien" }, { ...base, title: "Les 13 clés du bien-être au travail" })).toBe(0);
+    expect(scoreCandidate({ title: "CHATS & CHIENS tout fait l'histoire" }, { ...base, title: "100 chats qui ont fait l'histoire" })).toBe(0);
+    expect(scoreCandidate({ title: "Andalousie Routard" }, { ...base, title: "Le Routard Andalousie 2014" })).toBeGreaterThan(MIN_MATCH_SCORE);
+    expect(scoreCandidate({ title: "4000 MÉDICAMENTS SANS ORDONNANCE" }, { ...base, title: "4000 médicaments sans ordonnance" })).toBeGreaterThan(0.95);
   });
 
   it("reconnaît un des deux livres quand deux tranches voisines ont été lues ensemble", () => {
