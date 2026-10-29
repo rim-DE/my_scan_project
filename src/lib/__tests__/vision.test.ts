@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanDetections, DetectionResultSchema, mergeTiles, readingOrder, soloBooks, tileLayout, type DetectedBook } from "../vision";
+import { cleanDetections, DetectionResultSchema, mergeTiles, readingOrder, soloBooks, tightenBoxes, tileLayout, type CleanDetection, type DetectedBook } from "../vision";
 
 const SIZE = { width: 1000, height: 2000 };
 
@@ -120,5 +120,44 @@ describe("découpage en bandes", () => {
     const b = (title: string, x: number, y: number) => cleanDetections([book({ title, corners: quad(x, y, x + 30, y + 400) })], SIZE)[0];
     const out = readingOrder([b("DD", 100, 1200), b("BB", 300, 100), b("CC", 50, 1180), b("AA", 100, 120)]);
     expect(out.map((x) => x.title)).toEqual(["AA", "BB", "CC", "DD"]);
+  });
+});
+
+describe("tightenBoxes", () => {
+  const size = { width: 1000, height: 1000 };
+  const book = (title: string, x: number, w: number, shelf = 1, y = 0.1, h = 0.3): CleanDetection => ({
+    shelf,
+    title,
+    author: null,
+    publisher: null,
+    isbn: null,
+    corners: [],
+    text_direction: "bottom_to_top",
+    confidence: "high",
+    bbox: { x, y, w, h },
+    polygon: null,
+  });
+
+  it("ramène un rectangle qui couvre plusieurs livres à la place laissée par ses voisins", () => {
+    const books = [book("A", 0.1, 0.02), book("B", 0.12, 0.02), book("Gros", 0.1, 0.1), book("C", 0.14, 0.02), book("D", 0.3, 0.02)];
+    tightenBoxes(books, size);
+    const fat = books[2].bbox!;
+    expect(fat.x).toBeCloseTo(0.16);
+    expect(fat.w).toBeCloseTo(0.04);
+    expect(books[2].polygon).toHaveLength(4);
+  });
+
+  it("coupe au milieu le petit chevauchement de deux tranches voisines", () => {
+    const books = [book("A", 0.1, 0.03), book("B", 0.12, 0.03), book("C", 0.5, 0.03)];
+    tightenBoxes(books, size);
+    expect(books[0].bbox!.x + books[0].bbox!.w).toBeCloseTo(0.125);
+    expect(books[1].bbox!.x).toBeCloseTo(0.125);
+  });
+
+  it("laisse tranquille un gros livre sans voisin qui le chevauche", () => {
+    const books = [book("A", 0.1, 0.02), book("B", 0.13, 0.02), book("Encyclopédie", 0.2, 0.1), book("C", 0.4, 0.02)];
+    tightenBoxes(books, size);
+    const b = books[2].bbox!;
+    expect([b.x, b.y, b.w, b.h].map((v) => Math.round(v * 1000) / 1000)).toEqual([0.2, 0.1, 0.1, 0.3]);
   });
 });
