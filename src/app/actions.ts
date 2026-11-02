@@ -11,7 +11,7 @@ import { LOCALE_COOKIE, asLocale, getDict } from "@/lib/i18n";
 import { findOrCreateBookByIsbn, findOrCreateBookByTitle } from "@/lib/catalog";
 import { normalizeIsbn } from "@/lib/isbn";
 import { parsePriceToCents } from "@/lib/money";
-import { refreshPrices } from "@/lib/prices";
+import { refreshPrices, wantsPrices } from "@/lib/prices";
 import { processScan } from "@/lib/scan-processor";
 import { getStorage } from "@/lib/storage";
 import { mapLimit } from "@/lib/concurrency";
@@ -129,6 +129,7 @@ export async function identifyMissingAction(scanId: string) {
     });
     if (!book) return;
     await prisma.detection.update({ where: { id: d.id }, data: { bookId: book.id } });
+    if (!wantsPrices(book)) return;
     await refreshPrices(book.id, scan.country).catch((e) => console.warn("[prix] scan", book.id, e));
   });
   revalidatePath(`/scans/${scan.id}`);

@@ -154,6 +154,7 @@ export const fr = {
     link: "Lien",
     noPrice: "Aucun prix disponible pour l'instant. Configure une source de prix (voir README) ou ajoute un prix vu sur un site.",
     noPriceWaiting: "⏳ Prix en cours de récupération : Amazon (Keepa) ne donne qu'une vingtaine de livres par minute. Ils arrivent tout seuls, sans rien faire.",
+    noPriceOutOfList: "Pas dans ta liste de pépites : prix non demandé (mode rapide). Clique sur « Actualiser les prix » pour le demander quand même.",
     noPriceNotFound: "Amazon n'a ni offre ni vente connue pour ce livre. Regarde les autres sites avec les liens ci-dessus, ou ajoute un prix vu.",
     checkOn: "Vérifier sur",
     addStock: "Ajouter au stock",

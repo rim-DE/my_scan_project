@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { findPepite, finderSelection, indexPepites, isFreshPepite, mergeRows, parseCsv, pepiteResult, pepiteRow, toCsv } from "../pepites";
 
 // Temps Keepa = minutes depuis 2011 ; 2026-10-01 ≈ 8 207 000.
@@ -98,5 +98,17 @@ describe("pépites", () => {
     expect(findPepite(index, { isbn13: "9782070360024" })?.asin).toBe("2070360024");
     expect(findPepite(index, { isbn13: null, asin: "2070360024" })).not.toBeNull();
     expect(findPepite(index, { isbn13: "9780000000000" })).toBeNull();
+  });
+});
+
+describe("mode rapide", () => {
+  const book = { isbn13: "9780000000000", isbn10: null, asin: null };
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("ne demande pas les prix d'un livre hors liste, sauf PEPITES_ONLY=false", async () => {
+    const { wantsPrices } = await import("../prices");
+    expect(wantsPrices(book)).toBe(false);
+    vi.stubEnv("PEPITES_ONLY", "false");
+    expect(wantsPrices(book)).toBe(true);
   });
 });
