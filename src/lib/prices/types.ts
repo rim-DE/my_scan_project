@@ -25,9 +25,9 @@ export interface BookInfo {
   offerCount: number | null;
   /** Classement des ventes Amazon (1 = le plus vendu). */
   salesRank: number | null;
-  /** Note moyenne sur 5. */
-  rating: number | null;
-  reviewCount: number | null;
+  /** Note moyenne sur 5. Absente = pas fournie par la source : la valeur déjà connue est gardée. */
+  rating?: number | null;
+  reviewCount?: number | null;
   listPriceCents: number | null;
   /** Couverture, pour les livres que Google Books / Open Library n'illustrent pas. */
   coverUrl?: string | null;

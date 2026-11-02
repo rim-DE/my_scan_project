@@ -2,6 +2,7 @@
 // scripts/pepites.ts. Infos fixes (titre, ISBN, éditeur…) + infos qui bougent (prix, ventes), mises à jour
 // à chaque passage. Séparateur « ; » et virgule décimale, pour l'ouvrir tel quel dans Excel.
 import { keepaCoverUrl, parseKeepaSaleHistory, type KeepaProduct } from "./prices/providers/keepa";
+import type { PriceObservation, ProviderResult } from "./prices/types";
 
 /** Tranche de prix d'occasion recherchée (centimes). max absent = pas de plafond. */
 export interface PriceBand {
@@ -75,6 +76,9 @@ const COUNT_USED = 12;
 /** Supports qui ne sont pas des livres (la catégorie Livres en contient quelques-uns). */
 const NOT_A_BOOK = /dvd|blu-?ray|cd|audio|cassette|vinyle/i;
 
+/** Au plus 60 ventes par livre dans le fichier (les plus récentes), pour qu'il reste léger. */
+const MAX_SALES = 60;
+
 const euros = (cents: number | null | undefined) =>
   typeof cents === "number" && cents > 0 ? (cents / 100).toFixed(2).replace(".", ",") : "";
 const count = (n: number | null | undefined) => (typeof n === "number" && n >= 0 ? String(n) : "");
@@ -104,7 +108,8 @@ export function pepiteRow(p: KeepaBook, now = new Date()): PepiteRow | null {
   // Offre d'occasion absurde (plus de 5 fois le neuf) : on ne garde pas ce prix.
   const aberrant = usedPrice > 0 && newPrice > 0 && usedPrice > 5 * newPrice;
   const sales = parseKeepaSaleHistory(p, "FR", now);
-  const last5 = sales.slice(-5);
+  // Ventes des 12 derniers mois (au moins les 5 dernières), pour la médiane et le rythme de vente du BiblioRank.
+  const recent = sales.slice(-MAX_SALES);
   const year = p.publicationDate && p.publicationDate > 0 ? String(p.publicationDate).slice(0, 4) : "";
   return {
     ean,
@@ -129,9 +134,9 @@ export function pepiteRow(p: KeepaBook, now = new Date()): PepiteRow | null {
     ventes_90j: count(p.stats?.salesRankDrops90),
     ventes_180j: count(p.stats?.salesRankDrops180),
     ventes_365j: count(p.stats?.salesRankDrops365),
-    derniere_vente: last5.length ? day(last5[last5.length - 1].observedAt!) : "",
-    // « 2026-10-01=42,50|2026-09-12=39,90 » : date et prix de chaque vente estimée, la plus ancienne d'abord.
-    dernieres_ventes: last5.map((s) => `${day(s.observedAt!)}=${euros(s.priceCents)}`).join("|"),
+    derniere_vente: recent.length ? day(recent[recent.length - 1].observedAt!) : "",
+    // « 2026-09-12=39,90|2026-10-01=42,50 » : date et prix de chaque vente estimée, la plus ancienne d'abord.
+    dernieres_ventes: recent.map((s) => `${day(s.observedAt!)}=${euros(s.priceCents)}`).join("|"),
     rang_ventes: cur[SALES_RANK] > 0 ? String(cur[SALES_RANK]) : "",
     nb_offres_occasion: count(cur[COUNT_USED]),
     maj: day(now),
@@ -189,4 +194,67 @@ export function mergeRows(previous: PepiteRow[], fresh: PepiteRow[]): PepiteRow[
   const byAsin = new Map(previous.map((r) => [r.asin, r]));
   for (const r of fresh) byAsin.set(r.asin, r);
   return [...byAsin.values()];
+}
+
+/** Au-delà, les infos du fichier sont jugées trop vieilles et l'appli redemande à Keepa (le fichier est mis à jour chaque lundi). */
+export const PEPITE_MAX_AGE_DAYS = 10;
+
+const cents = (v: string) => {
+  const n = Math.round(Number(v.replace(",", ".")) * 100);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+const int = (v: string) => (v === "" || !Number.isFinite(Number(v)) ? null : Number(v));
+
+/** Les infos du fichier sont-elles assez récentes pour remplacer un appel à Keepa ? */
+export function isFreshPepite(row: PepiteRow, now = new Date()): boolean {
+  const updated = new Date(row.maj).getTime();
+  return Number.isFinite(updated) && now.getTime() - updated <= PEPITE_MAX_AGE_DAYS * 24 * 3600 * 1000;
+}
+
+/** Ligne du fichier → même résultat qu'un appel Keepa (prix, ventes datées, infos de la fiche), sans jeton. */
+export function pepiteResult(row: PepiteRow): ProviderResult {
+  const url = row.lien_amazon || null;
+  const offer = (offerType: "NEW" | "USED", priceCents: number | null): PriceObservation[] =>
+    priceCents ? [{ platform: "amazon", offerType, priceCents, currency: "EUR", url }] : [];
+  const sold: PriceObservation[] = row.dernieres_ventes
+    .split("|")
+    .map((s) => s.split("="))
+    .flatMap(([date, price]) => {
+      const priceCents = cents(price ?? "");
+      const observedAt = new Date(date);
+      return priceCents && Number.isFinite(observedAt.getTime())
+        ? [{ platform: "amazon", offerType: "SOLD" as const, priceCents, currency: "EUR", url, observedAt }]
+        : [];
+    });
+  return {
+    observations: [...offer("NEW", cents(row.prix_neuf)), ...offer("USED", cents(row.prix_occasion)), ...sold],
+    asin: row.asin || undefined,
+    sales: { sales30d: int(row.ventes_30j), sales12m: int(row.ventes_365j) },
+    // La note et le nombre d'avis ne sont pas dans le fichier : ceux déjà connus sont gardés.
+    info: {
+      offerCount: int(row.nb_offres_occasion),
+      salesRank: int(row.rang_ventes),
+      listPriceCents: cents(row.prix_editeur),
+      coverUrl: row.couverture || null,
+    },
+  };
+}
+
+/** Index du fichier par ISBN-13 et par ASIN. */
+export function indexPepites(rows: PepiteRow[]): Map<string, PepiteRow> {
+  const index = new Map<string, PepiteRow>();
+  for (const r of rows) {
+    if (r.ean) index.set(r.ean, r);
+    if (r.asin) index.set(r.asin, r);
+  }
+  return index;
+}
+
+/** Le livre est-il dans le fichier ? (par ISBN-13, puis ISBN-10 / ASIN) */
+export function findPepite(index: Map<string, PepiteRow>, book: { isbn13?: string | null; isbn10?: string | null; asin?: string | null }) {
+  for (const k of [book.isbn13, book.asin, book.isbn10]) {
+    const row = k ? index.get(k) : undefined;
+    if (row) return row;
+  }
+  return null;
 }

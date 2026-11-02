@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { finderSelection, mergeRows, parseCsv, pepiteRow, toCsv } from "../pepites";
+import { findPepite, finderSelection, indexPepites, isFreshPepite, mergeRows, parseCsv, pepiteResult, pepiteRow, toCsv } from "../pepites";
 
 // Temps Keepa = minutes depuis 2011 ; 2026-10-01 ≈ 8 207 000.
 const t = (iso: string) => new Date(iso).getTime() / 60000 - 21564000;
@@ -74,5 +74,29 @@ describe("pépites", () => {
   it("borne la tranche de prix quand il y a un maximum", () => {
     expect(finderSelection({ min: 2500, max: 3499 }, 0, 100)).toMatchObject({ current_USED_gte: 2500, current_USED_lte: 3499, avg90_NEW_gte: 2500 });
     expect(finderSelection({ min: 3500 }, 0, 100)).not.toHaveProperty("current_USED_lte");
+  });
+
+  it("remplace un appel Keepa par la ligne du fichier", () => {
+    const row = pepiteRow(product, now)!;
+    const r = pepiteResult(row);
+    expect(r.observations.map((o) => [o.offerType, o.priceCents])).toEqual([
+      ["NEW", 5000],
+      ["USED", 4200],
+      ["SOLD", 4200],
+      ["SOLD", 4200],
+    ]);
+    expect(r.observations[2].observedAt?.toISOString().slice(0, 10)).toBe("2026-09-01");
+    expect(r.sales).toEqual({ sales30d: 1, sales12m: 6 });
+    expect(r.info).toMatchObject({ offerCount: 7, salesRank: 20000, listPriceCents: 5500 });
+    expect(r.info).not.toHaveProperty("rating");
+    expect(isFreshPepite(row, new Date("2026-11-10"))).toBe(true);
+    expect(isFreshPepite(row, new Date("2026-11-20"))).toBe(false);
+  });
+
+  it("retrouve un livre du fichier par ISBN-13 ou ASIN", () => {
+    const index = indexPepites([pepiteRow(product, now)!]);
+    expect(findPepite(index, { isbn13: "9782070360024" })?.asin).toBe("2070360024");
+    expect(findPepite(index, { isbn13: null, asin: "2070360024" })).not.toBeNull();
+    expect(findPepite(index, { isbn13: "9780000000000" })).toBeNull();
   });
 });

@@ -8,6 +8,7 @@ import type { BadgeStats } from "./badges";
 import type { Prisma } from "@prisma/client";
 import type { NormalizedBox, Point, TextDirection } from "./geometry";
 import { computeMetrics, dropAberrantPrices, type BookMetrics } from "./prices/metrics";
+import { pepiteOf } from "./pepites-file";
 
 export interface PriceRow {
   id: string;
@@ -41,6 +42,8 @@ export interface BookView {
   /** Pourquoi il n'y a pas (encore) de prix : voir PriceStatus. */
   priceStatus: PriceStatus;
   hasDemo: boolean;
+  /** Le livre est dans le fichier de pépites Keepa (data/pepites.csv). */
+  inPepites: boolean;
 }
 
 type BookWithPrices = Prisma.BookGetPayload<{ include: { prices: true } }> & {
@@ -89,6 +92,7 @@ export function toBookView(book: BookWithPrices, country: string): BookView {
       enabledProviders().map((p) => p.id),
     ),
     hasDemo: snaps.some((s) => s.source === "demo"),
+    inPepites: pepiteOf(book) !== null,
   };
 }
 

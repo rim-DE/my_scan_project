@@ -4,6 +4,8 @@ import { env } from "../env";
 import { demoProvider } from "./providers/demo";
 import { ebayProvider } from "./providers/ebay";
 import { keepaProvider } from "./providers/keepa";
+import { isFreshPepite, pepiteResult } from "../pepites";
+import { pepiteOf } from "../pepites-file";
 import { computeStats, isFresh, type PriceStats } from "./stats";
 import type { BookRef, PriceProvider } from "./types";
 
@@ -36,7 +38,10 @@ export async function refreshPrices(bookId: string, country: string, opts: { for
     if (!opts.force && last?.ok && isFresh(last.fetchedAt, ttl)) continue;
 
     try {
-      const { observations, sales, info, asin } = await provider.fetch(ref, country);
+      // Livre du fichier de pépites (mis à jour chaque semaine) : ses infos Keepa y sont déjà, sans jeton.
+      const pepite = provider.id === "keepa" && country === "FR" ? pepiteOf(ref) : null;
+      const { observations, sales, info, asin } =
+        pepite && isFreshPepite(pepite) ? pepiteResult(pepite) : await provider.fetch(ref, country);
       await prisma.$transaction([
         // On remplace les anciennes données de cette source (les prix saisis à la main sont conservés).
         prisma.priceSnapshot.deleteMany({ where: { bookId, country, source: provider.source, platform: { in: platformsOf(provider.id) } } }),
@@ -64,6 +69,7 @@ export async function refreshPrices(bookId: string, country: string, opts: { for
                   ...(info && {
                     offerCount: info.offerCount,
                     salesRank: info.salesRank,
+                    // undefined (source qui ne les donne pas) : Prisma garde l'ancienne valeur.
                     rating: info.rating,
                     reviewCount: info.reviewCount,
                     // Le prix éditeur de Google Books reste prioritaire.
