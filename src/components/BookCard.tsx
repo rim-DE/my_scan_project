@@ -8,7 +8,6 @@ import { formatPrice } from "@/lib/money";
 import { PLATFORM_BY_ID, PLATFORMS, platformName, siteLinks } from "@/lib/prices/platforms";
 import { addManualPriceAction, addToListAction, addToStockAction, deletePriceAction, refreshPricesAction, saveNoteAction, setManualPepiteAction } from "@/app/actions";
 import { shortAge } from "@/lib/prices/metrics";
-import { SpineImage } from "./SpineImage";
 import { BookCover } from "./BookCover";
 import { BooksIcon, LocationView, LocateIcon, MoreIcon, SalesHistory, Sheet, SiteLogo, SitesSheet, type PhotoInfo } from "./BookPanels";
 
@@ -26,13 +25,11 @@ interface Props {
   canNote?: boolean;
   /** Livre sélectionné sur la photo (mis en évidence). */
   selected?: boolean;
-  /** Clic sur la tranche : montrer le livre sur la photo. */
-  onShowOnPhoto?: () => void;
 }
 
 const CONDITIONS = ["NEW", "LIKE_NEW", "VERY_GOOD", "GOOD", "ACCEPTABLE"] as const;
 
-export function BookCard({ detection, photo, photos = [], t, country, lists, path, locale, canNote = true, selected = false, onShowOnPhoto }: Props) {
+export function BookCard({ detection, photo, photos = [], t, country, lists, path, locale, canNote = true, selected = false }: Props) {
   const [panel, setPanel] = useState<null | "stock" | "list" | "note" | "price">(null);
   const [sheet, setSheet] = useState<null | "locate" | "history" | "more">(null);
   const [note, setNote] = useState(detection.note ?? "");
@@ -41,16 +38,6 @@ export function BookCard({ detection, photo, photos = [], t, country, lists, pat
   const loc = locale === "en" ? "en-GB" : "fr-FR";
   const fp = (c: number | null | undefined, cur = "EUR") => formatPrice(c, cur, loc);
   const ring = selected ? "ring-2 ring-fuchsia-500" : "";
-  const spine = photo && (detection.polygon || detection.bbox) && (
-    <SpineImage
-      src={photo.url}
-      polygon={detection.polygon}
-      bbox={detection.bbox}
-      textDirection={detection.textDirection}
-      alt={`${t.book.spineAlt} : ${detection.rawTitle ?? ""}`}
-      onClick={onShowOnPhoto}
-    />
-  );
   const canLocate = !!photo && !!(detection.polygon || detection.bbox);
   const iconBtn = "grid h-10 w-10 place-items-center rounded-full text-brand hover:bg-mint";
   const icons = (
@@ -83,7 +70,7 @@ export function BookCard({ detection, photo, photos = [], t, country, lists, pat
     return (
       <article id={detection.id} className={`card space-y-2 ${ring}`}>
         <div className="flex items-start gap-2">
-          <div className="min-w-0 flex-1 opacity-80">{spine}</div>
+          <div className="min-w-0 flex-1" />
           {icons}
         </div>
         <p className="text-xs font-semibold uppercase text-red-600">{t.scan.unidentified}</p>
@@ -171,7 +158,6 @@ export function BookCard({ detection, photo, photos = [], t, country, lists, pat
               {b.publishedDate && ` · ${b.publishedDate}`}
             </p>
           </div>
-          {spine}
         </div>
         {icons}
       </div>

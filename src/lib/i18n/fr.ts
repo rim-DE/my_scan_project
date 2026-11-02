@@ -201,7 +201,6 @@ export const fr = {
     atPrice: "Au prix de",
     noSales: "Aucune vente connue",
     allOffers: "Toutes les offres ({n})",
-    spineAlt: "Tranche du livre sur ta photo",
     locate: "Emplacement sur la photo",
     loadAllImages: "Charger toutes les images",
     notOnThisPhoto: "ce livre n'est pas sur cette photo",

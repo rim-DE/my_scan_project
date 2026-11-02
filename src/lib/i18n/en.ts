@@ -202,7 +202,6 @@ export const en: Dict = {
     atPrice: "At price",
     noSales: "No known sale",
     allOffers: "All offers ({n})",
-    spineAlt: "Book spine on your photo",
     locate: "Location on the photo",
     loadAllImages: "Load all images",
     notOnThisPhoto: "this book isn't on this photo",
