@@ -6,7 +6,7 @@ import { fmt } from "@/lib/i18n";
 import type { DetectionView } from "@/lib/queries";
 import { formatPrice } from "@/lib/money";
 import { PLATFORM_BY_ID, PLATFORMS, platformName, siteLinks } from "@/lib/prices/platforms";
-import { addManualPriceAction, addToListAction, addToStockAction, deletePriceAction, refreshPricesAction, saveNoteAction } from "@/app/actions";
+import { addManualPriceAction, addToListAction, addToStockAction, deletePriceAction, refreshPricesAction, saveNoteAction, setManualPepiteAction } from "@/app/actions";
 import { shortAge } from "@/lib/prices/metrics";
 import { SpineImage } from "./SpineImage";
 import { BookCover } from "./BookCover";
@@ -360,6 +360,12 @@ export function BookCard({ detection, photo, photos = [], t, country, lists, pat
         <button className="btn-outline" disabled={pending} onClick={() => start(() => refreshPricesAction(b.id, country, path))}>
           🔄 {pending ? t.common.loading : t.book.refreshPrices}
         </button>
+        {/* Les livres du fichier y sont déjà ; les autres s'ajoutent (ou se retirent) d'un clic. */}
+        {(!b.inPepites || b.manualPepite) && (
+          <button className="btn-outline" disabled={pending} onClick={() => start(() => setManualPepiteAction(b.id, !b.manualPepite, country, path))}>
+            {b.manualPepite ? `✖ ${t.book.removeFromPepites}` : `⭐ ${t.book.addToPepites}`}
+          </button>
+        )}
       </div>
 
       {panel === "stock" && (

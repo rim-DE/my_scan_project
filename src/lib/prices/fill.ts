@@ -75,6 +75,7 @@ export async function booksMissingPrices(scanId: string, country: string): Promi
       isbn13: true,
       isbn10: true,
       asin: true,
+      manualPepite: true,
       fetches: { where: { country }, select: { provider: true, ok: true, fetchedAt: true } },
       _count: { select: { prices: { where: { country } } } },
     },

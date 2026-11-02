@@ -12,8 +12,8 @@ import type { BookRef, PriceProvider } from "./types";
 export const PROVIDERS: PriceProvider[] = [ebayProvider, keepaProvider, demoProvider];
 
 /** Faut-il chercher les prix de ce livre après un scan ? En mode rapide, seulement s'il est dans le fichier de pépites. */
-export function wantsPrices(book: { isbn13: string | null; isbn10: string | null; asin: string | null }): boolean {
-  return !env.pepitesOnly() || pepiteOf(book) !== null;
+export function wantsPrices(book: { isbn13: string | null; isbn10: string | null; asin: string | null; manualPepite?: boolean }): boolean {
+  return !env.pepitesOnly() || book.manualPepite === true || pepiteOf(book) !== null;
 }
 
 export function enabledProviders(): PriceProvider[] {

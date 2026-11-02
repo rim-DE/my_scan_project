@@ -44,6 +44,8 @@ export interface BookView {
   hasDemo: boolean;
   /** Le livre est dans le fichier de pépites Keepa (data/pepites.csv). */
   inPepites: boolean;
+  /** Ajouté à la main à la liste (bouton ⭐). */
+  manualPepite: boolean;
 }
 
 type BookWithPrices = Prisma.BookGetPayload<{ include: { prices: true } }> & {
@@ -95,7 +97,8 @@ export function toBookView(book: BookWithPrices, country: string): BookView {
             enabledProviders().map((p) => p.id),
           ),
     hasDemo: snaps.some((s) => s.source === "demo"),
-    inPepites: pepiteOf(book) !== null,
+    inPepites: book.manualPepite || pepiteOf(book) !== null,
+    manualPepite: book.manualPepite,
   };
 }
 

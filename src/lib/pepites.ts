@@ -12,7 +12,7 @@ export interface PriceBand {
 }
 
 /** Tranches chargées. Pour en ajouter une (ex. 25-35 €) : { min: 2500, max: 3499 }. */
-export const BANDS: PriceBand[] = [{ min: 3500 }];
+export const BANDS: PriceBand[] = [{ min: 3500 }, { min: 2500, max: 3499 }];
 
 /** Recherche Keepa (Product Finder) d'une tranche : livres en français sur amazon.fr, pas vendus par Amazon, qui se vendent. */
 export function finderSelection(band: PriceBand, page: number, perPage: number) {
