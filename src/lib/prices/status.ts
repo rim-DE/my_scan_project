@@ -4,9 +4,10 @@
  * - "waiting" : au moins une source n'a pas encore répondu correctement (souvent la limite de jetons Keepa) ;
  * - "notFound" : toutes les sources ont répondu, mais sans aucun prix ;
  * - "ok" : au moins un prix ;
- * - "noSource" : aucune source de prix n'est configurée.
+ * - "noSource" : aucune source de prix n'est configurée ;
+ * - "outOfList" : mode rapide, le livre n'est pas dans le fichier de pépites, ses prix ne sont pas demandés.
  */
-export type PriceStatus = "waiting" | "notFound" | "ok" | "noSource";
+export type PriceStatus = "waiting" | "notFound" | "ok" | "noSource" | "outOfList";
 
 type Fetch = { provider: string; ok: boolean; fetchedAt: Date };
 

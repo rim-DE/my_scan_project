@@ -76,6 +76,11 @@ export const env = {
   ebayClientId: () => process.env.EBAY_CLIENT_ID,
   ebayClientSecret: () => process.env.EBAY_CLIENT_SECRET,
   keepaApiKey: () => process.env.KEEPA_API_KEY,
+  /**
+   * Mode rapide : après un scan photo, les prix ne sont demandés que pour les livres du fichier de pépites
+   * (data/pepites.csv). Les autres restent sans prix, sauf si on clique « Actualiser les prix ». PEPITES_ONLY=false pour tout chercher.
+   */
+  pepitesOnly: () => bool("PEPITES_ONLY", true),
 
   // Calés sur BiblioScan : commission Amazon 15 % + 1,01 € TVA comprise, plus ~3 € d'envoi.
   resaleFeeRate: () => num("RESALE_FEE_RATE", 0.2),

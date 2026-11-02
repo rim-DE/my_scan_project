@@ -155,6 +155,7 @@ export const en: Dict = {
     link: "Link",
     noPrice: "No price yet. Configure a price source (see README) or add a price you saw on a site.",
     noPriceWaiting: "⏳ Fetching prices: Amazon (Keepa) only allows about twenty books per minute. They will show up on their own.",
+    noPriceOutOfList: "Not in your gem list: price not requested (fast mode). Click “Refresh prices” to ask anyway.",
     noPriceNotFound: "Amazon has no offer and no known sale for this book. Check other sites with the links above, or add a price you saw.",
     checkOn: "Check on",
     addStock: "Add to stock",

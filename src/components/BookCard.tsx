@@ -298,7 +298,13 @@ export function BookCard({ detection, photo, photos = [], t, country, lists, pat
 
       {b.prices.length === 0 ? (
         <p className="text-sm text-slate-500">
-          {b.priceStatus === "waiting" ? t.book.noPriceWaiting : b.priceStatus === "notFound" ? t.book.noPriceNotFound : t.book.noPrice}
+          {b.priceStatus === "waiting"
+            ? t.book.noPriceWaiting
+            : b.priceStatus === "notFound"
+              ? t.book.noPriceNotFound
+              : b.priceStatus === "outOfList"
+                ? t.book.noPriceOutOfList
+                : t.book.noPrice}
         </p>
       ) : (
         <details className="overflow-x-auto">

@@ -2,7 +2,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { computeStats, bestByPlatform, type PriceStats } from "./prices/stats";
-import { enabledProviders, resaleSettings } from "./prices";
+import { enabledProviders, resaleSettings, wantsPrices } from "./prices";
 import { priceStatus, type PriceStatus } from "./prices/status";
 import type { BadgeStats } from "./badges";
 import type { Prisma } from "@prisma/client";
@@ -86,11 +86,14 @@ export function toBookView(book: BookWithPrices, country: string): BookView {
     metrics: computeMetrics(snaps, stats, book),
     prices: bestByPlatform(rows),
     otherEdition: Boolean(book.asin && book.isbn13 && book.asin !== book.isbn10),
-    priceStatus: priceStatus(
-      (book.fetches ?? []).filter((f) => f.country === country),
-      snaps.length,
-      enabledProviders().map((p) => p.id),
-    ),
+    priceStatus:
+      snaps.length === 0 && !wantsPrices(book)
+        ? "outOfList"
+        : priceStatus(
+            (book.fetches ?? []).filter((f) => f.country === country),
+            snaps.length,
+            enabledProviders().map((p) => p.id),
+          ),
     hasDemo: snaps.some((s) => s.source === "demo"),
     inPepites: pepiteOf(book) !== null,
   };
