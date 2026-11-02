@@ -217,6 +217,14 @@ export async function refreshPricesAction(bookId: string, country: string, path:
   revalidatePath(path.split("?")[0]);
 }
 
+/** Ajoute (ou retire) un livre de la liste de pépites ; ajouté, ses prix sont cherchés tout de suite. */
+export async function setManualPepiteAction(bookId: string, on: boolean, country: string, path: string) {
+  await requireUser();
+  await prisma.book.update({ where: { id: bookId }, data: { manualPepite: on } });
+  if (on) await refreshPrices(bookId, country).catch((e) => console.warn("[prix] pépite", bookId, e));
+  revalidatePath(path.split("?")[0]);
+}
+
 // ---------- Stock ----------
 
 export async function addToStockAction(fd: FormData) {

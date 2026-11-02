@@ -144,6 +144,8 @@ model Book {
   salesRank      Int?
   rating         Float?
   reviewCount    Int?
+  /// Ajouté à la main à la liste de pépites (bouton ⭐ sur la fiche) : ses prix sont cherchés comme ceux du fichier.
+  manualPepite   Boolean            @default(false)
   source         String
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
