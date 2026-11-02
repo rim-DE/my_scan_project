@@ -16,6 +16,8 @@ const STALE_PROCESSING_MS = 15 * 60 * 1000;
 const IDENTIFY_CONCURRENCY = 8;
 /** Une fonction Vercel dure 300 s au plus : on garde de la marge avant d'enchaîner sur les prix. */
 const FUNCTION_BUDGET_MS = 280_000;
+/** Temps gardé après les identifications pour passer le scan en « terminé » et commencer les prix. */
+const IDENTIFY_MARGIN_MS = 60_000;
 
 /** Réserve le scan (PENDING -> PROCESSING) de façon atomique : un seul traitement à la fois. */
 async function claim(scanId: string): Promise<boolean> {
@@ -52,10 +54,12 @@ export async function processScan(scanId: string): Promise<void> {
             return null;
           }
         });
-      // Google Vision lit toute la photo d'un coup (souvent plus de 100 livres) : tout identifier avant d'enregistrer
-      // dépasserait les 5 minutes d'une fonction Vercel. On enregistre donc les livres tout de suite, et ils sont
-      // identifiés ensuite par paquets (fillMissingPrices, relancé par la page du scan et par le cron).
+      // Google Vision lit toute la photo d'un coup (souvent plus de 100 livres) : on ne lance pas d'identification
+      // pendant la lecture, ils sont identifiés ensuite par paquets (fillMissingPrices, relancé par la page du scan et par le cron).
       const identifyNow = env.visionProvider() !== "google-vision";
+      // Identifications en cours : chaque livre est enregistré sans attendre la sienne, et complété dès qu'elle arrive.
+      // Sinon, un catalogue en panne (Google Books 503, Sudoc injoignable) bloque l'enregistrement jusqu'à la coupure à 300 s.
+      const pending: Promise<void>[] = [];
       await mapLimit(scan.photos, 2, async (photo) => {
         const jpeg = await getStorage().get(photo.storageKey);
         const early = new Map<CleanDetection, ReturnType<typeof identify>>();
@@ -64,16 +68,12 @@ export async function processScan(scanId: string): Promise<void> {
           mode: "shelf",
           onSure: identifyNow ? (books) => books.forEach((d) => early.set(d, identify(d))) : undefined,
         });
-        // Les livres vus dans le recouvrement de deux bandes ne sont identifiés qu'une fois les doublons retirés.
-        const books = detected.map((d) => (identifyNow ? (early.get(d) ?? identify(d)) : Promise.resolve(null)));
-        // Enregistrés dans l'ordre de lecture, au fur et à mesure : la page les affiche pendant que les suivants s'identifient.
-        for (const [i, d] of detected.entries()) {
-          const book = await books[i];
-          await prisma.detection.create({
+        // Enregistrés dans l'ordre de lecture, tout de suite : la page les affiche pendant qu'ils s'identifient.
+        for (const d of detected) {
+          const det = await prisma.detection.create({
             data: {
               scanId,
               photoId: photo.id,
-              bookId: book?.id ?? null,
               rawTitle: d.title,
               rawAuthor: d.author,
               bbox: (d.bbox as unknown as Prisma.InputJsonObject) ?? undefined,
@@ -82,8 +82,18 @@ export async function processScan(scanId: string): Promise<void> {
               confidence: d.confidence,
             },
           });
+          if (!identifyNow) continue;
+          // Les livres vus dans le recouvrement de deux bandes n'ont pas été identifiés pendant la lecture (doublons à retirer d'abord).
+          pending.push(
+            (early.get(d) ?? identify(d)).then(async (book) => {
+              if (book) await prisma.detection.update({ where: { id: det.id }, data: { bookId: book.id } }).catch(() => undefined);
+            }),
+          );
         }
       });
+      // On attend les identifications tant qu'il reste du temps ; celles qui traînent seront reprises en tâche de fond.
+      const left = FUNCTION_BUDGET_MS - IDENTIFY_MARGIN_MS - (Date.now() - started);
+      if (pending.length > 0 && left > 0) await Promise.race([Promise.all(pending), new Promise((r) => setTimeout(r, left))]);
     } else {
       // Scan par code-barres : la détection existe déjà, on rafraîchit les prix.
       const dets = await prisma.detection.findMany({ where: { scanId, bookId: { not: null } } });
