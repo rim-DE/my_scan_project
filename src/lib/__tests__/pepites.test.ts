@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { findPepite, finderSelection, indexPepites, isFreshPepite, mergeRows, parseCsv, pepiteResult, pepiteRow, toCsv } from "../pepites";
+import { findPepite, findPepiteByTitle, finderSelection, pepiteTitles, indexPepites, isFreshPepite, mergeRows, parseCsv, pepiteResult, pepiteRow, toCsv } from "../pepites";
 
 // Temps Keepa = minutes depuis 2011 ; 2026-10-01 ≈ 8 207 000.
 const t = (iso: string) => new Date(iso).getTime() / 60000 - 21564000;
@@ -110,5 +110,32 @@ describe("mode rapide", () => {
     expect(wantsPrices(book)).toBe(false);
     vi.stubEnv("PEPITES_ONLY", "false");
     expect(wantsPrices(book)).toBe(true);
+  });
+});
+
+describe("reconnaissance par le titre", () => {
+  const base = pepiteRow(product, now)!;
+  const row = (titre: string, auteur: string, asin: string) => ({ ...base, titre, auteur, asin });
+  const titles = pepiteTitles([
+    row("Frieren T14 - édition collector", "Kanehito Yamada", "A1"),
+    row("Frieren T13", "Kanehito Yamada", "A2"),
+    row("Dicobat visuel: Dictionnaire illustré du bâtiment", "Jean de Vigan", "A3"),
+    row("Paris", "Collectif", "A4"),
+  ]);
+  const find = (t: string, a?: string) => findPepiteByTitle(titles, t, a)?.asin ?? null;
+
+  it("retrouve la bonne pépite, même tome", () => {
+    expect(find("Frieren 14", "Yamada")).toBe("A1");
+    expect(find("FRIEREN T13", "Kanehito Yamada")).toBe("A2");
+    expect(find("Dicobat visuel", "J. de Vigan")).toBe("A3");
+    expect(find("Dicobat visuel")).toBe("A3");
+  });
+
+  it("refuse les correspondances douteuses", () => {
+    expect(find("Frieren")).toBeNull(); // quel tome ?
+    expect(find("Frieren 15", "Yamada")).toBeNull();
+    expect(find("Dicobat visuel", "Dupont")).toBeNull(); // autre auteur
+    expect(find("Paris")).toBeNull(); // un seul mot, sans auteur
+    expect(find("Le guide de Paris", "Collectif")).toBeNull(); // « guide » absent du titre
   });
 });

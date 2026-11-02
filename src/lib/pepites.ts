@@ -3,6 +3,7 @@
 // à chaque passage. Séparateur « ; » et virgule décimale, pour l'ouvrir tel quel dans Excel.
 import { keepaCoverUrl, parseKeepaSaleHistory, type KeepaProduct } from "./prices/providers/keepa";
 import type { PriceObservation, ProviderResult } from "./prices/types";
+import { normalizeText } from "./books";
 
 /** Tranche de prix d'occasion recherchée (centimes). max absent = pas de plafond. */
 export interface PriceBand {
@@ -257,4 +258,60 @@ export function findPepite(index: Map<string, PepiteRow>, book: { isbn13?: strin
     if (row) return row;
   }
   return null;
+}
+
+// ---------- Reconnaissance par le titre lu sur la tranche ----------
+
+const STOP = new Set(["le", "la", "les", "de", "des", "du", "un", "une", "et", "en", "au", "aux", "the", "of", "and", "pour", "sur", "dans"]);
+
+/** « T14 », « Tome 14 », « Vol. 14 » → « 14 », pour comparer les numéros de tome quelle que soit l'écriture. */
+const words = (s: string) =>
+  normalizeText(s)
+    .split(" ")
+    .filter((w) => !["tome", "vol", "volume", "no"].includes(w))
+    .map((w) => w.replace(/^(?:t|vol|n)(\d+)$/, "$1"))
+    .filter((w) => (w.length > 1 || /\d/.test(w)) && !STOP.has(w));
+
+/** Titre principal, sans sous-titre ni mention d'édition (« Frieren T14 - édition collector » → « Frieren T14 »). */
+const mainTitle = (t: string) => t.split(/\s*:\s+|\s+[-–]\s+|\s*[(\[]/)[0];
+
+export interface PepiteTitles {
+  row: PepiteRow;
+  all: Set<string>;
+  main: string[];
+  authors: Set<string>;
+}
+
+/** Mots de chaque titre du fichier, calculés une fois. */
+export function pepiteTitles(rows: PepiteRow[]): PepiteTitles[] {
+  return rows
+    .filter((row) => row.titre)
+    .map((row) => ({ row, all: new Set(words(row.titre)), main: [...new Set(words(mainTitle(row.titre)))], authors: new Set(words(row.auteur)) }));
+}
+
+/**
+ * Pépite dont le titre correspond au titre lu sur la tranche, sans passer par un catalogue.
+ * Prudent : presque tous les mots lus doivent être dans le titre de la pépite, l'essentiel de son titre principal doit
+ * avoir été lu, et le nom de l'auteur doit correspondre quand on a les deux. Sinon null (le catalogue prendra le relais).
+ */
+export function findPepiteByTitle(titles: PepiteTitles[], title: string, author?: string | null): PepiteRow | null {
+  const read = [...new Set(words(title))];
+  if (read.length === 0) return null;
+  const surname = author ? words(author).at(-1) : undefined;
+  let best: { row: PepiteRow; score: number; tie: boolean } | null = null;
+  for (const p of titles) {
+    const readCovered = read.filter((w) => p.all.has(w)).length / read.length;
+    if (readCovered < 0.8) continue;
+    const mainCovered = p.main.length ? p.main.filter((w) => read.includes(w)).length / p.main.length : 0;
+    const authorKnown = surname !== undefined && p.authors.size > 0;
+    const authorOk = authorKnown && p.authors.has(surname!);
+    if (authorKnown && !authorOk) continue;
+    // Sans auteur pour confirmer, il faut un titre lu de plusieurs mots et presque tout le titre principal.
+    if (mainCovered < (authorOk ? 0.6 : 0.8) || (!authorOk && read.length < 2)) continue;
+    const score = mainCovered + readCovered + (authorOk ? 1 : 0);
+    if (!best || score > best.score + 1e-9) best = { row: p.row, score, tie: false };
+    else if (Math.abs(score - best.score) <= 1e-9) best.tie = true;
+  }
+  // Deux pépites aussi proches (« Rituels de vocabulaire CE1 » / « CE2 ») : on ne choisit pas au hasard, le catalogue tranchera.
+  return best && !best.tie ? best.row : null;
 }
