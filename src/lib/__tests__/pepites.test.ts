@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { findPepite, findPepiteByTitle, finderSelection, pepiteTitles, indexPepites, isFreshPepite, mergeRows, parseCsv, pepiteResult, pepiteRow, toCsv } from "../pepites";
+import { findPepite, findPepiteByTitle, isAdultTitle, finderSelection, pepiteTitles, indexPepites, isFreshPepite, mergeRows, parseCsv, pepiteResult, pepiteRow, toCsv } from "../pepites";
 
 // Temps Keepa = minutes depuis 2011 ; 2026-10-01 ≈ 8 207 000.
 const t = (iso: string) => new Date(iso).getTime() / 60000 - 21564000;
@@ -137,5 +137,20 @@ describe("reconnaissance par le titre", () => {
     expect(find("Dicobat visuel", "Dupont")).toBeNull(); // autre auteur
     expect(find("Paris")).toBeNull(); // un seul mot, sans auteur
     expect(find("Le guide de Paris", "Collectif")).toBeNull(); // « guide » absent du titre
+  });
+});
+
+describe("livres pour adultes", () => {
+  it("écarte les titres érotiques, pas les autres", () => {
+    for (const t of ["Coffret Sexy Cosplay Doll T15", "Contes érotiques", "Erotisme et littérature", "Hentai collection", "Le Kama Sutra illustré"]) {
+      expect(isAdultTitle(t)).toBe(true);
+    }
+    for (const t of ["Pérotin et l'école de Notre-Dame", "Essex : histoire d'un comté", "Frieren T14", "Le syndrome de Peter Pan"]) {
+      expect(isAdultTitle(t)).toBe(false);
+    }
+  });
+
+  it("exclut les catégories érotiques de la recherche Keepa", () => {
+    expect(finderSelection({ min: 1000, max: 1499 }, 0, 500).categories_exclude).toContain(588062);
   });
 });

@@ -12,12 +12,22 @@ export interface PriceBand {
 }
 
 /** Tranches chargées. Pour en ajouter une (ex. 25-35 €) : { min: 2500, max: 3499 }. */
-export const BANDS: PriceBand[] = [{ min: 3500 }, { min: 2500, max: 3499 }];
+// Une recherche Keepa rend au plus 10 000 livres : les tranches sont découpées pour rester en dessous
+// (le 2/11/2026 : 35 € et + ≈ 1 500, 25-35 € ≈ 2 300, 15-25 € ≈ 6 300, 10-15 € ≈ 4 900).
+export const BANDS: PriceBand[] = [{ min: 3500 }, { min: 2500, max: 3499 }, { min: 1500, max: 2499 }, { min: 1000, max: 1499 }];
+
+/** Catégories amazon.fr écartées d'emblée : BD érotiques, romans érotiques, érotique. */
+const EXCLUDED_CATEGORIES = [574008, 588062, 470906];
+
+/** Livres érotiques ou pour adultes, que rim ne veut pas dans sa liste (en plus des catégories écartées). */
+const ADULT = /(?<![a-zà-ÿ])[ée]roti|\bsexy?\b|hentai|ecchi|kama ?sutra|porno|\bx{3}\b|\bcharme\b.*\bnu/i;
+export const isAdultTitle = (title: string) => ADULT.test(title);
 
 /** Recherche Keepa (Product Finder) d'une tranche : livres en français sur amazon.fr, pas vendus par Amazon, qui se vendent. */
 export function finderSelection(band: PriceBand, page: number, perPage: number) {
   return {
     rootCategory: [301061],
+    categories_exclude: EXCLUDED_CATEGORIES,
     languages: ["french"],
     current_USED_gte: band.min,
     ...(band.max ? { current_USED_lte: band.max } : {}),
@@ -77,8 +87,8 @@ const COUNT_USED = 12;
 /** Supports qui ne sont pas des livres (la catégorie Livres en contient quelques-uns). */
 const NOT_A_BOOK = /dvd|blu-?ray|cd|audio|cassette|vinyle/i;
 
-/** Au plus 60 ventes par livre dans le fichier (les plus récentes), pour qu'il reste léger. */
-const MAX_SALES = 60;
+/** Au plus 30 ventes par livre dans le fichier (les plus récentes), pour qu'il reste léger. */
+const MAX_SALES = 30;
 
 const euros = (cents: number | null | undefined) =>
   typeof cents === "number" && cents > 0 ? (cents / 100).toFixed(2).replace(".", ",") : "";
@@ -86,6 +96,7 @@ const count = (n: number | null | undefined) => (typeof n === "number" && n >= 0
 const day = (d: Date) => d.toISOString().slice(0, 10);
 
 interface KeepaBook extends KeepaProduct {
+  isAdultProduct?: boolean;
   binding?: string;
   publicationDate?: number;
   numberOfPages?: number;
@@ -102,6 +113,7 @@ interface KeepaBook extends KeepaProduct {
 export function pepiteRow(p: KeepaBook, now = new Date()): PepiteRow | null {
   if (!p.asin || !p.title) return null;
   if (p.binding && NOT_A_BOOK.test(p.binding)) return null;
+  if (p.isAdultProduct || isAdultTitle(p.title)) return null;
   const ean = p.eanList?.find((e) => /^97[89]\d{10}$/.test(e)) ?? "";
   const cur = p.stats?.current ?? [];
   const usedPrice = cur[USED];

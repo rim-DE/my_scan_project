@@ -3,20 +3,27 @@
 //   KEEPA_API_KEY=… npm run pepites
 //   npm run pepites -- --max 200        (essai : 200 livres au plus)
 //
-// Lancé chaque semaine par .github/workflows/pepites.yml. Coût : environ 1 jeton Keepa par livre.
-// Keepa redonne 20 jetons par minute : le script attend tout seul quand il n'en a plus.
+// Lancé toutes les 6 heures par .github/workflows/pepites.yml. Coût : environ 1 jeton Keepa par livre.
+// Keepa redonne 20 jetons par minute (1 200 par heure) : le script attend tout seul quand il n'en a plus.
+// Avec ~15 000 livres, un passage ne peut pas tout charger : il prend au plus MAX_PER_RUN fiches, les livres
+// nouveaux d'abord, puis ceux dont les infos ont plus de STALE_DAYS jours. Le premier remplissage prend donc
+// environ une journée, ensuite chaque livre est remis à jour à peu près chaque semaine.
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { parseArgs } from "node:util";
-import { BANDS, finderSelection, mergeRows, parseCsv, pepiteRow, toCsv, type PepiteRow } from "../src/lib/pepites";
+import { BANDS, finderSelection, isAdultTitle, mergeRows, parseCsv, pepiteRow, toCsv, type PepiteRow } from "../src/lib/pepites";
 
 const FILE = "data/pepites.csv";
 const DOMAIN_FR = 4;
 const PER_PAGE = 500;
 const BATCH = 50;
+/** Fiches chargées par passage : ~3 h 20 de jetons, sous la limite de 6 h d'une tâche GitHub. */
+const MAX_PER_RUN = 4000;
+/** Âge à partir duquel un livre déjà dans le fichier est remis à jour. */
+const STALE_DAYS = 6;
 
 const { values } = parseArgs({ options: { max: { type: "string" } } });
-const max = values.max ? Number(values.max) : Infinity;
+const max = values.max ? Number(values.max) : MAX_PER_RUN;
 const key = process.env.KEEPA_API_KEY;
 if (!key) throw new Error("KEEPA_API_KEY manquante.");
 
@@ -67,7 +74,7 @@ async function keepa<T>(path: string, params: Record<string, string>, cost: numb
 async function findAsins(): Promise<string[]> {
   const found = new Set<string>();
   for (const band of BANDS) {
-    for (let page = 0; found.size < max; page++) {
+    for (let page = 0; ; page++) {
       const sel = finderSelection(band, page, PER_PAGE);
       const json = await keepa<{ asinList?: string[]; totalResults?: number }>(
         "query",
@@ -80,15 +87,20 @@ async function findAsins(): Promise<string[]> {
       if (list.length < PER_PAGE) break;
     }
   }
-  return [...found].slice(0, max);
+  return [...found];
 }
 
 async function main() {
-  const previous = await readFile(FILE, "utf8").then(parseCsv, () => [] as PepiteRow[]);
+  // Les livres érotiques chargés avant le filtre sont retirés.
+  const previous = (await readFile(FILE, "utf8").then(parseCsv, () => [] as PepiteRow[])).filter((r) => !isAdultTitle(r.titre));
   console.log(`${previous.length} livres déjà dans ${FILE}`);
-  // Les livres déjà connus sont rafraîchis aussi, même s'ils ne sont plus dans la recherche.
-  const asins = [...new Set([...(await findAsins()), ...previous.map((r) => r.asin)])].slice(0, max);
-  console.log(`${asins.length} fiches à charger (environ ${asins.length} jetons)`);
+  const known = new Set(previous.map((r) => r.asin));
+  const added = (await findAsins()).filter((a) => !known.has(a));
+  // Les livres déjà connus sont remis à jour aussi, même s'ils ne sont plus dans la recherche : les plus anciens d'abord.
+  const staleBefore = new Date(Date.now() - STALE_DAYS * 24 * 3600 * 1000).toISOString().slice(0, 10);
+  const stale = previous.filter((r) => !r.maj || r.maj < staleBefore).sort((a, b) => a.maj.localeCompare(b.maj)).map((r) => r.asin);
+  const asins = [...added, ...stale].slice(0, max);
+  console.log(`${added.length} nouveaux livres, ${stale.length} à remettre à jour : ${asins.length} fiches chargées ce passage`);
 
   const fresh: PepiteRow[] = [];
   for (let i = 0; i < asins.length; i += BATCH) {
