@@ -145,14 +145,6 @@ export function ScanViewer({ photos, detections, t, country, lists, path, locale
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
 
-  /** Clic sur une tranche dans la liste : on montre le livre sur la photo. */
-  function showOnPhoto(d: DetectionView) {
-    setSelected(d.id);
-    const idx = photos.findIndex((p) => p.id === d.photoId);
-    if (idx >= 0) setPhotoIdx(idx);
-    photoRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-
   function exportCsv() {
     const url = URL.createObjectURL(new Blob([toCsv(shown)], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a");
@@ -264,7 +256,6 @@ export function ScanViewer({ photos, detections, t, country, lists, path, locale
             path={path}
             locale={locale}
             selected={selected === d.id}
-            onShowOnPhoto={() => showOnPhoto(d)}
           />
         ))}
       </div>

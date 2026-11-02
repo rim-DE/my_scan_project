@@ -11,8 +11,6 @@ import type { BookView, DetectionView } from "@/lib/queries";
 import { boxToQuad } from "@/lib/geometry";
 import { formatPrice } from "@/lib/money";
 import { bestAmazonOffer, platformName, siteLinks } from "@/lib/prices/platforms";
-import { SpineImage } from "./SpineImage";
-
 export interface PhotoInfo {
   id: string;
   url: string;
@@ -195,16 +193,6 @@ export function LocationView({ detection, photos, t }: { detection: DetectionVie
           </label>
         )}
       </div>
-      {photo && own[0] && (
-        <SpineImage
-          src={own[0].url}
-          polygon={detection.polygon}
-          bbox={detection.bbox}
-          textDirection={detection.textDirection}
-          height={64}
-          alt={`${t.book.spineAlt} : ${detection.rawTitle ?? ""}`}
-        />
-      )}
       {b && (b.isbn13 || b.isbn10) && (
         <p className="text-center text-sm font-medium">
           {[b.isbn13, b.isbn10].filter(Boolean).join(" | ")}
