@@ -1,22 +1,29 @@
 // Lecture de data/pepites.csv côté serveur (une fois par instance). Fichier absent = liste vide.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { findPepite, indexPepites, parseCsv, type PepiteRow } from "./pepites";
+import { findPepite, findPepiteByTitle, indexPepites, parseCsv, pepiteTitles, type PepiteRow, type PepiteTitles } from "./pepites";
 
-let index: Map<string, PepiteRow> | null = null;
+let loaded: { index: Map<string, PepiteRow>; titles: PepiteTitles[] } | null = null;
 
-function load(): Map<string, PepiteRow> {
-  if (!index) {
+function load() {
+  if (!loaded) {
+    let rows: PepiteRow[] = [];
     try {
-      index = indexPepites(parseCsv(readFileSync(join(process.cwd(), "data", "pepites.csv"), "utf8")));
+      rows = parseCsv(readFileSync(join(process.cwd(), "data", "pepites.csv"), "utf8"));
     } catch {
-      index = new Map();
+      // pas de fichier : liste vide
     }
+    loaded = { index: indexPepites(rows), titles: pepiteTitles(rows) };
   }
-  return index;
+  return loaded;
 }
 
 /** Fiche du livre dans le fichier de pépites, ou null. */
 export function pepiteOf(book: { isbn13?: string | null; isbn10?: string | null; asin?: string | null }): PepiteRow | null {
-  return findPepite(load(), book);
+  return findPepite(load().index, book);
+}
+
+/** Pépite reconnue d'après le titre (et l'auteur) lus sur la tranche, ou null. */
+export function pepiteByTitle(title: string, author?: string | null): PepiteRow | null {
+  return findPepiteByTitle(load().titles, title, author);
 }

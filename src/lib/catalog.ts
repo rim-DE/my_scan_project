@@ -2,6 +2,7 @@
 import { prisma } from "./db";
 import { lookupByIsbn, lookupByTitle, lookupCacheKey, type BookInfo } from "./books";
 import { normalizeIsbn } from "./isbn";
+import type { PepiteRow } from "./pepites";
 
 async function upsertBook(info: BookInfo) {
   const data = {
@@ -41,4 +42,27 @@ export async function findOrCreateBookByTitle(q: { title: string; author?: strin
   const book = info ? await upsertBook(info) : null;
   await prisma.lookupCache.upsert({ where: { key }, create: { key, bookId: book?.id ?? null }, update: { bookId: book?.id ?? null } });
   return book;
+}
+
+/** Livre de la liste de pépites, créé d'après sa ligne du fichier (fiche Amazon), sans interroger de catalogue. */
+export async function findOrCreateBookFromPepite(row: PepiteRow) {
+  if (row.ean) {
+    const existing = await prisma.book.findUnique({ where: { isbn13: row.ean } });
+    if (existing) return existing;
+  }
+  const listPrice = Math.round(Number(row.prix_editeur.replace(",", ".")) * 100);
+  const book = await upsertBook({
+    isbn13: row.ean || null,
+    isbn10: row.isbn10 || null,
+    title: row.titre.replace(/\s+[-–]\s+(broché|poche|relié|paperback|hardcover).*$/i, "").trim(),
+    authors: row.auteur ? [row.auteur] : [],
+    publisher: row.editeur || null,
+    publishedDate: row.annee || null,
+    language: "fr",
+    pageCount: Number(row.pages) || null,
+    coverUrl: row.couverture || null,
+    listPriceCents: listPrice > 0 ? listPrice : null,
+    source: "amazon",
+  });
+  return book.asin ? book : prisma.book.update({ where: { id: book.id }, data: { asin: row.asin } });
 }

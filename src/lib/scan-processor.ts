@@ -4,7 +4,9 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "./db";
 import { getStorage } from "./storage";
 import { detectBooks, type CleanDetection } from "./vision";
-import { findOrCreateBookByIsbn, findOrCreateBookByTitle } from "./catalog";
+import { findOrCreateBookByIsbn, findOrCreateBookByTitle, findOrCreateBookFromPepite } from "./catalog";
+import { pepiteByTitle, pepiteOf } from "./pepites-file";
+import { normalizeIsbn } from "./isbn";
 import { refreshPrices } from "./prices";
 import { fillMissingPrices } from "./prices/fill";
 import { refineSpines } from "./refine";
@@ -47,6 +49,12 @@ export async function processScan(scanId: string): Promise<void> {
       const identify = (d: CleanDetection) =>
         limit(async () => {
           try {
+            // Pépite reconnue par son ISBN ou son titre : livre créé depuis le fichier, sans attendre un catalogue.
+            const isbn13 = d.isbn ? normalizeIsbn(d.isbn)?.isbn13 : null;
+            const pepite = (isbn13 ? pepiteOf({ isbn13 }) : null) ?? pepiteByTitle(d.title, d.author);
+            if (pepite) return await findOrCreateBookFromPepite(pepite);
+            // Mode rapide : les autres livres sont identifiés après coup (fillMissingPrices), le scan ne les attend pas.
+            if (env.pepitesOnly()) return null;
             const book = d.isbn ? await findOrCreateBookByIsbn(d.isbn) : null;
             return book ?? (await findOrCreateBookByTitle({ title: d.title, author: d.author, publisher: d.publisher, language: scan.bookLanguage }));
           } catch (e) {

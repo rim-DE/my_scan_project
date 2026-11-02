@@ -1,7 +1,8 @@
 // Récupère en tâche de fond les prix qui manquent dans un scan (ex. jetons Keepa épuisés pendant le scan).
 import { prisma } from "../db";
 import { CatalogUnavailableError } from "../books";
-import { findOrCreateBookByTitle } from "../catalog";
+import { findOrCreateBookByTitle, findOrCreateBookFromPepite } from "../catalog";
+import { pepiteByTitle } from "../pepites-file";
 import { enabledProviders, refreshPrices, wantsPrices } from ".";
 import { needsFetch } from "./status";
 
@@ -41,7 +42,10 @@ async function identifyMissing(scanId: string, language: string, deadline: numbe
     const busy = await Promise.all(
       batch.map(async (d) => {
         try {
-          const book = await findOrCreateBookByTitle({ title: d.rawTitle!, author: d.rawAuthor, language });
+          const pepite = pepiteByTitle(d.rawTitle!, d.rawAuthor);
+          const book = pepite
+            ? await findOrCreateBookFromPepite(pepite)
+            : await findOrCreateBookByTitle({ title: d.rawTitle!, author: d.rawAuthor, language });
           if (book) await prisma.detection.update({ where: { id: d.id }, data: { bookId: book.id } });
           return false;
         } catch (e) {
