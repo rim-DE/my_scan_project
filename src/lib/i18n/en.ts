@@ -167,6 +167,8 @@ export const en: Dict = {
     publisherPrice: "List price",
     biblioRankHelp: "Score from 0 to 100, tuned on BiblioScan's ranking: net profit × chance of selling (6- and 12-month sales), lower when someone sells below the median. It stays at 5 or less with no sale in 12 months, and buyback is a floor.",
     inStock: "Already in stock",
+    inPepites: "Gem list",
+    inPepitesHelp: "This book is in your Keepa gem list (books at €35+ that sell), updated every Monday.",
     banger: "Banger",
     bangerHelp: "Worth reselling: price ≥ €35, at least 3 sales in 12 months, ratio ≥ 1.2, and no current offer or one ≥ €27.",
     salesRank: "Rank",

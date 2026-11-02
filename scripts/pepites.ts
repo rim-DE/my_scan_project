@@ -12,7 +12,7 @@ import { BANDS, finderSelection, mergeRows, parseCsv, pepiteRow, toCsv, type Pep
 
 const FILE = "data/pepites.csv";
 const DOMAIN_FR = 4;
-const PER_PAGE = 2000;
+const PER_PAGE = 500;
 const BATCH = 50;
 
 const { values } = parseArgs({ options: { max: { type: "string" } } });
@@ -56,7 +56,8 @@ async function keepa<T>(path: string, params: Record<string, string>, cost: numb
       tokens.tokensLeft = undefined;
       continue;
     }
-    if (!res.ok) throw new Error(`Keepa ${path} HTTP ${res.status}`);
+    // Keepa explique son refus dans la réponse (clé invalide, filtre inconnu…) : on l'affiche.
+    if (!res.ok) throw new Error(`Keepa ${path} HTTP ${res.status} : ${JSON.stringify(json).slice(0, 500)}`);
     return json;
   }
   throw new Error(`Keepa ${path} : toujours pas de jetons après 10 essais.`);

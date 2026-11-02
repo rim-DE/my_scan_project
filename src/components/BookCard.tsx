@@ -157,6 +157,11 @@ export function BookCard({ detection, photo, photos = [], t, country, lists, pat
                   🏅 {t.book.banger}
                 </span>
               )}
+              {b.inPepites && (
+                <span title={t.book.inPepitesHelp} className="rounded-full bg-violet-100 px-2.5 py-0.5 text-sm font-semibold text-violet-800">
+                  ⭐ {t.book.inPepites}
+                </span>
+              )}
               {detection.inStock && <span className="rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-semibold text-sky-800">📦 {t.book.inStock}</span>}
             </div>
             <h3 className="text-base font-semibold leading-tight">{b.title}</h3>
