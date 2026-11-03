@@ -123,6 +123,7 @@ export async function identifyMissingAction(scanId: string) {
   const dets = await prisma.detection.findMany({ where: { scanId: scan.id, bookId: null, rawTitle: { not: null } } });
   // 4 à la fois seulement : c'est justement l'excès de recherches simultanées qui fait saturer Google Books.
   await mapLimit(dets, 4, async (d) => {
+    await prisma.detection.update({ where: { id: d.id }, data: { lookupTries: { increment: 1 } } });
     const book = await findOrCreateBookByTitle({ title: d.rawTitle!, author: d.rawAuthor, language: scan.bookLanguage }).catch((e) => {
       console.warn("[scan] identification impossible", d.rawTitle, e);
       return null;
@@ -133,6 +134,20 @@ export async function identifyMissingAction(scanId: string) {
     await refreshPrices(book.id, scan.country).catch((e) => console.warn("[prix] scan", book.id, e));
   });
   revalidatePath(`/scans/${scan.id}`);
+}
+
+/** Identifie un seul livre lu sur la photo, quand rim clique dessus (mode rapide : pas d'identification pendant le scan). */
+export async function identifyDetectionAction(detectionId: string, path: string) {
+  const user = await requireUser();
+  const d = await prisma.detection.findFirst({ where: { id: detectionId, scan: { userId: user.id } }, include: { scan: true } });
+  if (!d?.rawTitle) return;
+  await prisma.detection.update({ where: { id: d.id }, data: { lookupTries: { increment: 1 } } });
+  const book = await findOrCreateBookByTitle({ title: d.rawTitle, author: d.rawAuthor, language: d.scan.bookLanguage }).catch((e) => {
+    console.warn("[scan] identification impossible", d.rawTitle, e);
+    return null;
+  });
+  if (book) await prisma.detection.update({ where: { id: d.id }, data: { bookId: book.id } });
+  revalidatePath(path.split("?")[0]);
 }
 
 export async function barcodeScanAction(_: FormState, fd: FormData): Promise<FormState> {

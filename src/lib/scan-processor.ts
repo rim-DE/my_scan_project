@@ -53,7 +53,7 @@ export async function processScan(scanId: string): Promise<void> {
             const isbn13 = d.isbn ? normalizeIsbn(d.isbn)?.isbn13 : null;
             const pepite = (isbn13 ? pepiteOf({ isbn13 }) : null) ?? pepiteByTitle(d.title, d.author);
             if (pepite) return await findOrCreateBookFromPepite(pepite);
-            // Mode rapide : les autres livres sont identifiés après coup (fillMissingPrices), le scan ne les attend pas.
+            // Mode rapide : les autres livres ne sont cherchés dans les catalogues que si rim clique dessus (identifyDetectionAction).
             if (env.pepitesOnly()) return null;
             const book = d.isbn ? await findOrCreateBookByIsbn(d.isbn) : null;
             return book ?? (await findOrCreateBookByTitle({ title: d.title, author: d.author, publisher: d.publisher, language: scan.bookLanguage }));

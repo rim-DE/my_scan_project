@@ -115,6 +115,8 @@ export interface DetectionView {
   book: BookView | null;
   /** Le livre est déjà dans ton stock (non vendu). */
   inStock: boolean;
+  /** Nombre de recherches déjà faites dans les catalogues (0 = jamais cherché, mode rapide). */
+  lookupTries?: number;
 }
 
 export async function getScanView(scanId: string, userId: string) {
@@ -144,6 +146,7 @@ export async function getScanView(scanId: string, userId: string) {
     note: d.note,
     book: d.book ? toBookView(d.book, scan.country) : null,
     inStock: d.bookId ? inStock.has(d.bookId) : false,
+    lookupTries: d.lookupTries,
   }));
   return { scan, detections };
 }

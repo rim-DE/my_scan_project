@@ -5,6 +5,7 @@ import { findOrCreateBookByTitle, findOrCreateBookFromPepite } from "../catalog"
 import { pepiteByTitle } from "../pepites-file";
 import { enabledProviders, refreshPrices, wantsPrices } from ".";
 import { needsFetch } from "./status";
+import { env } from "../env";
 
 /** Au-delà, une récupération est considérée comme interrompue (une fonction Vercel dure 5 min au plus). */
 const CLAIM_MS = 6 * 60_000;
@@ -14,8 +15,13 @@ const RATE_LIMIT_PAUSE_MS = 30_000;
 /** Nombre de fois qu'un livre non identifié est recherché à nouveau en tâche de fond. */
 export const MAX_LOOKUP_TRIES = 4;
 
-/** Livres lus sur la photo mais pas encore trouvés, dont la recherche peut être relancée. */
-export function retryableDetections(scanId: string) {
+/**
+ * Livres lus sur la photo mais pas encore trouvés, dont la recherche peut être relancée en tâche de fond.
+ * Mode rapide : aucun. Les pépites ont déjà été reconnues pendant le scan (titre ou ISBN), les autres livres
+ * ne sont cherchés dans les catalogues que si rim clique dessus (« Identifier ce livre ») : le scan finit tout de suite.
+ */
+export async function retryableDetections(scanId: string) {
+  if (env.pepitesOnly()) return [];
   return prisma.detection.findMany({
     where: { scanId, bookId: null, rawTitle: { not: null }, lookupTries: { lt: MAX_LOOKUP_TRIES } },
     select: { id: true, rawTitle: true, rawAuthor: true },
