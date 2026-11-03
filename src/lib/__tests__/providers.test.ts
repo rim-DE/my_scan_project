@@ -115,12 +115,15 @@ describe("liens vers les annonces (fenêtre « … »)", () => {
     expect(links.find((l) => l.id === "amazon")).toMatchObject({ priceCents: 2640, priceKind: "offer" });
     expect(links.find((l) => l.id === "momox")).toMatchObject({ priceCents: 676, priceKind: "buyback" });
     expect(links.find((l) => l.id === "fnac")!.priceCents).toBeNull();
+    // Tous les sites, Leboncoin et Vinted compris, sont cherchés par ISBN.
+    for (const l of links) if (l.id !== "amazon") expect(l.url).toContain("9782253088578");
   });
 
   it("sans ISBN, cherche par titre et auteur et retire les sites qui exigent un ISBN", () => {
     const links = siteLinks({ isbn13: null, title: "L'Étranger", author: "Camus" }, []);
     expect(links.some((l) => l.id === "momox")).toBe(false);
     expect(links.find((l) => l.id === "amazon")!.url).toContain(encodeURIComponent("L'Étranger Camus"));
+    expect(links.find((l) => l.id === "leboncoin")!.url).toContain(encodeURIComponent("L'Étranger Camus"));
   });
 
   it("ouvre directement la fiche Amazon du livre (ASIN = ISBN-10)", () => {

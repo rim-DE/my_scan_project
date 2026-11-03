@@ -44,14 +44,14 @@ export const PLATFORMS: Platform[] = [
     name: "Leboncoin",
     color: "#ec5a13",
     access: "Aucune API publique ; scraping interdit par les CGU. Lien de recherche uniquement.",
-    searchUrl: ({ title }) => `https://www.leboncoin.fr/recherche?category=27&text=${enc(title)}`,
+    searchUrl: ({ isbn13 }) => `https://www.leboncoin.fr/recherche?category=27&text=${isbn13}`,
   },
   {
     id: "vinted",
     name: "Vinted",
     color: "#09b1ba",
     access: "Aucune API publique ; scraping interdit par les CGU. Lien de recherche uniquement.",
-    searchUrl: ({ title }) => `https://www.vinted.fr/catalog?search_text=${enc(title)}`,
+    searchUrl: ({ isbn13 }) => `https://www.vinted.fr/catalog?search_text=${isbn13}`,
   },
   {
     id: "momox",
@@ -124,7 +124,8 @@ const ISBN_ONLY = new Set(["momox", "abebooks"]);
 
 /**
  * Liens vers les annonces de ce livre sur chaque site, avec le meilleur prix connu de nos sources.
- * Sans ISBN (livre lu sur la photo mais pas identifié), on cherche par titre et auteur là où c'est possible.
+ * Tous les sites sont cherchés par ISBN (choix de rim, plus précis). Sans ISBN (livre lu sur la photo mais pas
+ * identifié), on cherche par titre et auteur là où c'est possible.
  */
 export function siteLinks(
   q: { isbn13: string | null; title: string; author?: string | null },
