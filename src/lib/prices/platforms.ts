@@ -44,6 +44,7 @@ export const PLATFORMS: Platform[] = [
     name: "Leboncoin",
     color: "#ec5a13",
     access: "Aucune API publique ; scraping interdit par les CGU. Lien de recherche uniquement.",
+    // Leboncoin : titre et auteur (les vendeurs y écrivent rarement l'ISBN), choix de rim.
     searchUrl: ({ title }) => `https://www.leboncoin.fr/recherche?category=27&text=${enc(title)}`,
   },
   {
@@ -51,7 +52,7 @@ export const PLATFORMS: Platform[] = [
     name: "Vinted",
     color: "#09b1ba",
     access: "Aucune API publique ; scraping interdit par les CGU. Lien de recherche uniquement.",
-    searchUrl: ({ title }) => `https://www.vinted.fr/catalog?search_text=${enc(title)}`,
+    searchUrl: ({ isbn13 }) => `https://www.vinted.fr/catalog?search_text=${isbn13}`,
   },
   {
     id: "momox",
@@ -124,7 +125,8 @@ const ISBN_ONLY = new Set(["momox", "abebooks"]);
 
 /**
  * Liens vers les annonces de ce livre sur chaque site, avec le meilleur prix connu de nos sources.
- * Sans ISBN (livre lu sur la photo mais pas identifié), on cherche par titre et auteur là où c'est possible.
+ * Tous les sites sont cherchés par ISBN (choix de rim, plus précis), sauf Leboncoin : titre et auteur. Sans ISBN (livre lu sur la photo mais pas
+ * identifié), on cherche par titre et auteur là où c'est possible.
  */
 export function siteLinks(
   q: { isbn13: string | null; title: string; author?: string | null },
@@ -132,7 +134,9 @@ export function siteLinks(
 ): SiteLink[] {
   const all = [...PLATFORMS, ...LOOKUP_SITES];
   const text = [q.title, q.author].filter(Boolean).join(" ");
-  const query = { isbn13: q.isbn13 ?? enc(text), title: q.isbn13 ? q.title : text };
+  // Titre principal seulement (sans le sous-titre après « : », « - » ou une parenthèse) : une annonce le reprend rarement en entier.
+  const mainTitle = q.title.split(/\s*[:(\[]|\s+[-–]\s+/)[0].trim() || q.title;
+  const query = { isbn13: q.isbn13 ?? enc(text), title: [mainTitle, q.author].filter(Boolean).join(" ") };
   const ids = SITE_ORDER.filter((id) => q.isbn13 || !ISBN_ONLY.has(id));
   return ids.map((id) => all.find((p) => p.id === id)!).map((p) => {
     const offers = prices.filter((x) => x.platform === p.id && (x.offerType === "USED" || x.offerType === "NEW"));
