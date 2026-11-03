@@ -67,4 +67,5 @@ Exemple : le *Dictionnaire des symboles* a un prix médian de 18,34 €. Son pro
 - **Prix du fichier** : ils peuvent avoir jusqu'à 2 semaines. Au-delà de 18 jours, l'appli redemande le prix à Keepa.
 - **Prix moyen sur 90 jours** : il est parfois absurde dans le fichier (par exemple 1 622 € pour un Dicobat), ce défaut n'est pas encore corrigé. Je me fie plutôt au prix médian de vente et aux dernières ventes.
 - **Livre hors liste** : ça ne veut pas dire qu'il ne vaut rien. Il a pu sortir à cause des ventes, ou ne jamais être entré. En cas de doute, j'utilise « Actualiser les prix ».
+- **Plusieurs éditions** : quand ma liste contient plusieurs éditions du même livre (par exemple le *Dictionnaire des symboles* de 1982 à 18 € et de 1996 à 30 €), l'appli affiche la plus chère avec le badge « ⚠️ 2 éditions dans ta liste ». Je vérifie l'année ou la couverture avant d'acheter.
 - **Mauvaise identification** : l'appli peut se tromper de livre. Je vérifie le titre et l'édition avec le bouton « emplacement » avant d'acheter.

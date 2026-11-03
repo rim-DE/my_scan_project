@@ -8,7 +8,7 @@ import type { BadgeStats } from "./badges";
 import type { Prisma } from "@prisma/client";
 import type { NormalizedBox, Point, TextDirection } from "./geometry";
 import { computeMetrics, dropAberrantPrices, type BookMetrics } from "./prices/metrics";
-import { pepiteOf } from "./pepites-file";
+import { pepiteEditions, pepiteOf } from "./pepites-file";
 
 export interface PriceRow {
   id: string;
@@ -44,6 +44,8 @@ export interface BookView {
   hasDemo: boolean;
   /** Le livre est dans le fichier de pépites Keepa (data/pepites.csv). */
   inPepites: boolean;
+  /** Nombre d'éditions de ce livre dans la liste de pépites (plus d'une : vérifier l'édition avant d'acheter). */
+  pepiteEditions: number;
   /** Ajouté à la main à la liste (bouton ⭐). */
   manualPepite: boolean;
 }
@@ -98,6 +100,7 @@ export function toBookView(book: BookWithPrices, country: string): BookView {
           ),
     hasDemo: snaps.some((s) => s.source === "demo"),
     inPepites: book.manualPepite || pepiteOf(book) !== null,
+    pepiteEditions: pepiteEditions(book),
     manualPepite: book.manualPepite,
   };
 }

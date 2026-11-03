@@ -173,6 +173,8 @@ export const en: Dict = {
     biblioRankHelp: "Score from 0 to 100, tuned on BiblioScan's ranking: net profit × chance of selling (6- and 12-month sales), lower when someone sells below the median. It stays at 5 or less with no sale in 12 months, and buyback is a floor.",
     inStock: "Already in stock",
     inPepites: "Gem list",
+    severalEditions: "{n} editions in your list",
+    severalEditionsHelp: "Your list holds several editions of this book: the app shows the most expensive one. Check the year or the cover before buying.",
     addToPepites: "Add to my list",
     removeFromPepites: "Remove from my list",
     inPepitesHelp: "This book is in your Keepa gem list (books at €10+ sold at least 3 times in 6 months, or added by you), updated on the 1st and 15th of each month.",
