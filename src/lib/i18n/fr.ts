@@ -172,6 +172,8 @@ export const fr = {
     biblioRankHelp: "Score de 0 à 100, calé sur le classement de BiblioScan : profit net × chance de vendre (ventes sur 6 et 12 mois), en baisse si quelqu'un vend moins cher que la médiane. Il ne dépasse pas 5 sans vente sur 12 mois, et le rachat sert de plancher.",
     inStock: "Déjà en stock",
     inPepites: "Liste pépites",
+    severalEditions: "{n} éditions dans ta liste",
+    severalEditionsHelp: "Ta liste contient plusieurs éditions de ce livre : l'appli affiche la plus chère. Vérifie l'année ou la couverture avant d'acheter.",
     addToPepites: "Ajouter à ma liste",
     removeFromPepites: "Retirer de ma liste",
     inPepitesHelp: "Ce livre est dans ta liste de pépites Keepa (livres à 10 € et plus vendus au moins 3 fois en 6 mois, ou ajoutés par toi), mise à jour le 1er et le 15 du mois.",

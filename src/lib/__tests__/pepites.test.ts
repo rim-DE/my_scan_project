@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BANDS, MIN_SALES_180, medianSaleCents, sellsEnough, findPepite, findPepiteByTitle, isAdultTitle, finderSelection, pepiteTitles, indexPepites, isFreshPepite, mergeRows, parseCsv, pepiteResult, pepiteRow, toCsv } from "../pepites";
+import { BANDS, editionCount, MIN_SALES_180, medianSaleCents, sellsEnough, findPepite, findPepiteByTitle, isAdultTitle, finderSelection, pepiteTitles, indexPepites, isFreshPepite, mergeRows, parseCsv, pepiteResult, pepiteRow, toCsv } from "../pepites";
 
 // Temps Keepa = minutes depuis 2011 ; 2026-10-01 ≈ 8 207 000.
 const t = (iso: string) => new Date(iso).getTime() / 60000 - 21564000;
@@ -145,6 +145,17 @@ describe("reconnaissance par le titre", () => {
     expect(find("Dicobat visuel", "Dupont")).toBeNull(); // autre auteur
     expect(find("Paris")).toBeNull(); // un seul mot, sans auteur
     expect(find("Le guide de Paris", "Collectif")).toBeNull(); // « guide » absent du titre
+  });
+
+  it("prend la plus chère de plusieurs éditions du même livre", () => {
+    const t = "Dictionnaire des symboles: Mythes, rêves, coutumes";
+    const cheap = { ...row(t, "Jean Chevalier", "D1982"), dernieres_ventes: "2026-10-01=18,34|2026-10-05=18,30" };
+    const dear = { ...row(t, "Gheerbrant, Alain", "D1996"), dernieres_ventes: "2026-09-01=30,44" };
+    const other = row("Dictionnaire des symboles chrétiens", "Dupont", "D2000");
+    const eds = pepiteTitles([cheap, dear, other]);
+    expect(findPepiteByTitle(eds, "DICTIONNAIRE DES SYMBOLES")?.asin).toBe("D1996");
+    expect(editionCount(eds, cheap)).toBe(2);
+    expect(editionCount(eds, other)).toBe(1);
   });
 });
 

@@ -165,6 +165,11 @@ export function BookCard({ detection, photo, photos = [], t, country, lists, pat
                   ⭐ {t.book.inPepites}
                 </span>
               )}
+              {b.pepiteEditions > 1 && (
+                <span title={t.book.severalEditionsHelp} className="rounded-full bg-amber-100 px-2.5 py-0.5 text-sm font-semibold text-amber-900">
+                  ⚠️ {t.book.severalEditions.replace("{n}", String(b.pepiteEditions))}
+                </span>
+              )}
               {detection.inStock && <span className="rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-semibold text-sky-800">📦 {t.book.inStock}</span>}
             </div>
             <h3 className="text-base font-semibold leading-tight">{b.title}</h3>

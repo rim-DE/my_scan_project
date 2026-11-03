@@ -355,7 +355,8 @@ export function findPepiteByTitle(titles: PepiteTitles[], title: string, author?
   const read = [...new Set(words(title))];
   if (read.length === 0) return null;
   const surname = author ? words(author).at(-1) : undefined;
-  let best: { row: PepiteRow; score: number; tie: boolean } | null = null;
+  let bestScore = -Infinity;
+  let tied: PepiteTitles[] = [];
   for (const p of titles) {
     // La tranche porte souvent le nom de l'auteur avec le titre (« Roland Barthes LA CHAMBRE CLAIRE ») : ses mots comptent.
     const readCovered = read.filter((w) => p.all.has(w) || p.authors.has(w)).length / read.length;
@@ -369,9 +370,41 @@ export function findPepiteByTitle(titles: PepiteTitles[], title: string, author?
     // Sans auteur pour confirmer, il faut un titre lu de plusieurs mots et presque tout le titre principal.
     if (mainCovered < (authorOk ? 0.6 : 0.8) || (!authorOk && read.length < 2)) continue;
     const score = mainCovered + readCovered + (authorOk ? 1 : 0);
-    if (!best || score > best.score + 1e-9) best = { row: p.row, score, tie: false };
-    else if (Math.abs(score - best.score) <= 1e-9) best.tie = true;
+    if (score > bestScore + 1e-9) {
+      bestScore = score;
+      tied = [p];
+    } else if (Math.abs(score - bestScore) <= 1e-9) tied.push(p);
   }
-  // Deux pépites aussi proches (« Rituels de vocabulaire CE1 » / « CE2 ») : on ne choisit pas au hasard, le catalogue tranchera.
-  return best && !best.tie ? best.row : null;
+  if (tied.length === 0) return null;
+  if (tied.length === 1) return tied[0].row;
+  // Plusieurs éditions du même livre (Dictionnaire des symboles 1982 / 1996) : la plus chère, rim vérifie l'édition
+  // (choix de rim, 3/11/2026 ; la fiche affiche « plusieurs éditions »).
+  if (tied.every((p) => sameBook(p, tied[0]))) return mostExpensive(tied.map((p) => p.row));
+  // Deux livres différents aussi proches (« Rituels de vocabulaire CE1 » / « CE2 ») : on ne choisit pas au hasard, le catalogue tranchera.
+  return null;
+}
+
+const sameSet = (a: Set<string>, b: Set<string>) => a.size === b.size && [...a].every((w) => b.has(w));
+
+/** Deux lignes du fichier sont deux éditions du même livre : même titre complet, ou même titre principal et un auteur commun. */
+function sameBook(a: PepiteTitles, b: PepiteTitles): boolean {
+  if (sameSet(a.all, b.all)) return true;
+  const sameMain = a.main.length === b.main.length && a.main.every((w) => b.main.includes(w));
+  return sameMain && [...a.authors].some((w) => w.length > 2 && b.authors.has(w));
+}
+
+/** Prix de référence d'une ligne : médiane des dernières ventes, sinon prix d'occasion actuel. */
+function refPriceCents(row: PepiteRow): number {
+  return medianSaleCents(row) ?? Math.round(Number((row.prix_occasion || "0").replace(",", ".")) * 100);
+}
+
+function mostExpensive(rows: PepiteRow[]): PepiteRow {
+  return rows.reduce((a, b) => (refPriceCents(b) > refPriceCents(a) ? b : a));
+}
+
+/** Nombre d'éditions du même livre dans le fichier (1 = une seule), pour prévenir rim de vérifier l'édition. */
+export function editionCount(titles: PepiteTitles[], row: PepiteRow): number {
+  const me = titles.find((p) => p.row === row);
+  if (!me) return 1;
+  return titles.filter((p) => p === me || sameBook(p, me)).length;
 }
