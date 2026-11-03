@@ -4,7 +4,7 @@
 
 ## 1. Ma liste de pépites
 
-La liste contient 8 170 livres au 3/11 (avant l'ajout des livres chers qui se vendent lentement, voir ci-dessous). Le chiffre sera remis à jour à la fin de leur chargement. Elle est construite à partir d'Amazon.fr, via Keepa, dans le fichier [`data/pepites.csv`](../data/pepites.csv).
+La liste contient 10 736 livres au 3/11 : environ 10 250 en français et 450 en anglais. Parmi eux, 1 306 sont des livres chers qui se vendent lentement (voir l'exception ci-dessous). Elle est construite à partir d'Amazon.fr, via Keepa, dans le fichier [`data/pepites.csv`](../data/pepites.csv).
 
 | | Livres en français | Livres en anglais |
 | --- | --- | --- |
