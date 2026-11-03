@@ -124,6 +124,8 @@ describe("reconnaissance par le titre", () => {
     row("Frieren T13", "Kanehito Yamada", "A2"),
     row("Dicobat visuel: Dictionnaire illustré du bâtiment", "Jean de Vigan", "A3"),
     row("Paris", "Collectif", "A4"),
+    row("La Chambre claire : Note sur la photographie", "Roland Barthes", "A5"),
+    row("La Philosophie Pour les Nuls, Nouvelle édition augmentée", "Christian Godin", "A6"),
   ]);
   const find = (t: string, a?: string) => findPepiteByTitle(titles, t, a)?.asin ?? null;
 
@@ -132,6 +134,9 @@ describe("reconnaissance par le titre", () => {
     expect(find("FRIEREN T13", "Kanehito Yamada")).toBe("A2");
     expect(find("Dicobat visuel", "J. de Vigan")).toBe("A3");
     expect(find("Dicobat visuel")).toBe("A3");
+    // Nom de l'auteur écrit sur la tranche avec le titre, mention d'édition absente de la tranche.
+    expect(find("Roland Barthes LA CHAMBRE CLAIRE")).toBe("A5");
+    expect(find("La Philosophie POUR LES NULS")).toBe("A6");
   });
 
   it("refuse les correspondances douteuses", () => {
