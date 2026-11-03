@@ -171,7 +171,7 @@ export const en: Dict = {
     inPepites: "Gem list",
     addToPepites: "Add to my list",
     removeFromPepites: "Remove from my list",
-    inPepitesHelp: "This book is in your Keepa gem list (books at €25+ that sell, or added by you), updated every Monday.",
+    inPepitesHelp: "This book is in your Keepa gem list (books at €10+ sold at least 3 times in 6 months, or added by you), updated on the 1st and 15th of each month.",
     banger: "Banger",
     bangerHelp: "Worth reselling: price ≥ €35, at least 3 sales in 12 months, ratio ≥ 1.2, and no current offer or one ≥ €27.",
     salesRank: "Rank",

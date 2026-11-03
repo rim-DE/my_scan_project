@@ -1,10 +1,11 @@
-# Met à jour data/pepites.csv depuis Keepa toutes les 6 heures (4 000 livres au plus par passage, voir scripts/pepites.ts),
+# Met à jour data/pepites.csv depuis Keepa le 1er et le 15 du mois, en 3 passages de 4 000 livres au plus
+# (voir scripts/pepites.ts),
 # ou à la demande : onglet Actions > « Pépites Keepa » > Run workflow.
 name: Pépites Keepa
 
 on:
   schedule:
-    - cron: "15 */6 * * *"
+    - cron: "15 1,7,13 1,15 * *"
   workflow_dispatch:
     inputs:
       max:
@@ -37,7 +38,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/pepites.csv
+          git add data/pepites.csv data/pepites-ecartes.csv
           git diff --cached --quiet && exit 0
           git commit -m "Pépites Keepa : mise à jour du $(date +%F)"
           git pull --rebase origin ${{ github.ref_name }}

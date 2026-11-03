@@ -3,24 +3,27 @@
 //   KEEPA_API_KEY=… npm run pepites
 //   npm run pepites -- --max 200        (essai : 200 livres au plus)
 //
-// Lancé toutes les 6 heures par .github/workflows/pepites.yml. Coût : environ 1 jeton Keepa par livre.
-// Keepa redonne 20 jetons par minute (1 200 par heure) : le script attend tout seul quand il n'en a plus.
-// Avec ~15 000 livres, un passage ne peut pas tout charger : il prend au plus MAX_PER_RUN fiches, les livres
-// nouveaux d'abord, puis ceux dont les infos ont plus de STALE_DAYS jours. Le premier remplissage prend donc
-// environ une journée, ensuite chaque livre est remis à jour à peu près chaque semaine.
+// Lancé le 1er et le 15 du mois (3 passages ce jour-là) par .github/workflows/pepites.yml. Coût : environ 1 jeton
+// Keepa par livre. Keepa redonne 20 jetons par minute (1 200 par heure) : le script attend tout seul quand il n'en a plus.
+// Un passage prend au plus MAX_PER_RUN fiches : les livres nouveaux d'abord, puis ceux dont les infos ont plus de
+// STALE_DAYS jours. Chaque livre est ainsi remis à jour toutes les deux semaines.
+// Un livre vendu moins de MIN_SALES_180 fois en 6 mois sort du fichier ; il est noté dans ECARTES pour ne pas
+// être rechargé à chaque passage, et sera revu deux semaines plus tard (il revient s'il se vend de nouveau).
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { parseArgs } from "node:util";
-import { BANDS, finderSelection, isAdultTitle, mergeRows, parseCsv, pepiteRow, toCsv, type PepiteRow } from "../src/lib/pepites";
+import { BANDS, finderSelection, isAdultTitle, mergeRows, MIN_SALES_180, parseCsv, pepiteRow, sellsEnough, toCsv, type PepiteRow } from "../src/lib/pepites";
 
 const FILE = "data/pepites.csv";
+/** Livres écartés faute de ventes (« asin;date »), revus après STALE_DAYS jours. */
+const ECARTES = "data/pepites-ecartes.csv";
 const DOMAIN_FR = 4;
 const PER_PAGE = 500;
 const BATCH = 50;
 /** Fiches chargées par passage : ~3 h 20 de jetons, sous la limite de 6 h d'une tâche GitHub. */
 const MAX_PER_RUN = 4000;
 /** Âge à partir duquel un livre déjà dans le fichier est remis à jour. */
-const STALE_DAYS = 6;
+const STALE_DAYS = 13;
 
 const { values } = parseArgs({ options: { max: { type: "string" } } });
 const max = values.max ? Number(values.max) : MAX_PER_RUN;
@@ -91,18 +94,31 @@ async function findAsins(): Promise<string[]> {
 }
 
 async function main() {
-  // Les livres érotiques chargés avant le filtre sont retirés.
+  // Les livres érotiques chargés avant le filtre sont retirés, ainsi que ceux qui ne se vendent plus assez.
   const previous = (await readFile(FILE, "utf8").then(parseCsv, () => [] as PepiteRow[])).filter((r) => !isAdultTitle(r.titre));
   console.log(`${previous.length} livres déjà dans ${FILE}`);
-  const known = new Set(previous.map((r) => r.asin));
+  const staleBefore = new Date(Date.now() - STALE_DAYS * 24 * 3600 * 1000).toISOString().slice(0, 10);
+  const today = new Date().toISOString().slice(0, 10);
+  // Écartés récemment : on ne les recharge pas avant STALE_DAYS jours.
+  const rejected = new Map(
+    (await readFile(ECARTES, "utf8").catch(() => ""))
+      .split("\n")
+      .map((l) => l.trim().split(";"))
+      .filter(([a, d]) => a && d && d >= staleBefore) as [string, string][],
+  );
+  const known = new Set([...previous.map((r) => r.asin), ...rejected.keys()]);
   const added = (await findAsins()).filter((a) => !known.has(a));
   // Les livres déjà connus sont remis à jour aussi, même s'ils ne sont plus dans la recherche : les plus anciens d'abord.
-  const staleBefore = new Date(Date.now() - STALE_DAYS * 24 * 3600 * 1000).toISOString().slice(0, 10);
   const stale = previous.filter((r) => !r.maj || r.maj < staleBefore).sort((a, b) => a.maj.localeCompare(b.maj)).map((r) => r.asin);
   const asins = [...added, ...stale].slice(0, max);
   console.log(`${added.length} nouveaux livres, ${stale.length} à remettre à jour : ${asins.length} fiches chargées ce passage`);
 
   const fresh: PepiteRow[] = [];
+  const result = () => {
+    const rows = mergeRows(previous, fresh);
+    for (const r of rows) if (!sellsEnough(r)) rejected.set(r.asin, today);
+    return rows.filter(sellsEnough);
+  };
   for (let i = 0; i < asins.length; i += BATCH) {
     const batch = asins.slice(i, i + BATCH);
     const json = await keepa<{ products?: Parameters<typeof pepiteRow>[0][] }>(
@@ -116,16 +132,17 @@ async function main() {
     }
     console.log(`  ${Math.min(i + BATCH, asins.length)}/${asins.length} (jetons restants : ${tokens.tokensLeft ?? "?"})`);
     // Sauvegarde au fil de l'eau : si la tâche s'arrête, rien n'est perdu.
-    if ((i / BATCH) % 10 === 9) await save(mergeRows(previous, fresh));
+    if ((i / BATCH) % 10 === 9) await save(result(), rejected);
   }
-  const rows = mergeRows(previous, fresh);
-  await save(rows);
-  console.log(`${FILE} : ${rows.length} livres (${fresh.length} mis à jour)`);
+  const rows = result();
+  await save(rows, rejected);
+  console.log(`${FILE} : ${rows.length} livres (${fresh.length} mis à jour, ${rejected.size} écartés : moins de ${MIN_SALES_180} ventes en 6 mois)`);
 }
 
-async function save(rows: PepiteRow[]) {
+async function save(rows: PepiteRow[], rejected: Map<string, string>) {
   await mkdir(dirname(FILE), { recursive: true });
   await writeFile(FILE, toCsv(rows));
+  await writeFile(ECARTES, [...rejected].map(([a, d]) => `${a};${d}`).join("\n") + "\n");
 }
 
 main().catch((e) => {

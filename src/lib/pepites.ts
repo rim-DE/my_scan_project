@@ -9,12 +9,27 @@ import { normalizeText } from "./books";
 export interface PriceBand {
   min: number;
   max?: number;
+  /** Langue des livres (par défaut : français). */
+  language?: "french" | "english";
+  /** Rang de ventes Amazon moyen sur 6 mois à ne pas dépasser (par défaut 400 000). */
+  maxRank?: number;
 }
 
 /** Tranches chargées. Pour en ajouter une (ex. 25-35 €) : { min: 2500, max: 3499 }. */
 // Une recherche Keepa rend au plus 10 000 livres : les tranches sont découpées pour rester en dessous
 // (le 2/11/2026 : 35 € et + ≈ 1 500, 25-35 € ≈ 2 300, 15-25 € ≈ 6 300, 10-15 € ≈ 4 900).
-export const BANDS: PriceBand[] = [{ min: 3500 }, { min: 2500, max: 3499 }, { min: 1500, max: 2499 }, { min: 1000, max: 1499 }];
+// Livres en anglais : moins demandés en France, donc seulement à 25 € et plus et bien classés (≈ 720 livres le 3/11/2026).
+export const BANDS: PriceBand[] = [
+  { min: 3500 },
+  { min: 2500, max: 3499 },
+  { min: 1500, max: 2499 },
+  { min: 1000, max: 1499 },
+  { min: 2500, language: "english", maxRank: 150000 },
+];
+
+/** Ventes minimum sur les 6 derniers mois pour rester dans la liste (règle choisie par rim le 3/11/2026). */
+export const MIN_SALES_180 = 3;
+export const sellsEnough = (row: PepiteRow) => Number(row.ventes_180j || 0) >= MIN_SALES_180;
 
 /** Catégories amazon.fr écartées d'emblée : BD érotiques, romans érotiques, érotique. */
 const EXCLUDED_CATEGORIES = [574008, 588062, 470906];
@@ -23,18 +38,18 @@ const EXCLUDED_CATEGORIES = [574008, 588062, 470906];
 const ADULT = /(?<![a-zà-ÿ])[ée]roti|\bsexy?\b|hentai|ecchi|kama ?sutra|porno|\bx{3}\b|\bcharme\b.*\bnu/i;
 export const isAdultTitle = (title: string) => ADULT.test(title);
 
-/** Recherche Keepa (Product Finder) d'une tranche : livres en français sur amazon.fr, pas vendus par Amazon, qui se vendent. */
+/** Recherche Keepa (Product Finder) d'une tranche : livres de la langue choisie sur amazon.fr, pas vendus par Amazon, qui se vendent. */
 export function finderSelection(band: PriceBand, page: number, perPage: number) {
   return {
     rootCategory: [301061],
     categories_exclude: EXCLUDED_CATEGORIES,
-    languages: ["french"],
+    languages: [band.language ?? "french"],
     current_USED_gte: band.min,
     ...(band.max ? { current_USED_lte: band.max } : {}),
     // Moyenne sur 90 jours, pas le prix du jour : écarte les livres dont le prix neuf vient juste de flamber.
     avg90_NEW_gte: band.min,
     buyBoxIsAmazon: false,
-    avg180_SALES_lte: 400000,
+    avg180_SALES_lte: band.maxRank ?? 400000,
     current_SALES_gte: 1,
     sort: [["avg180_SALES", "asc"]],
     page,
@@ -209,8 +224,8 @@ export function mergeRows(previous: PepiteRow[], fresh: PepiteRow[]): PepiteRow[
   return [...byAsin.values()];
 }
 
-/** Au-delà, les infos du fichier sont jugées trop vieilles et l'appli redemande à Keepa (le fichier est mis à jour chaque lundi). */
-export const PEPITE_MAX_AGE_DAYS = 10;
+/** Au-delà, les infos du fichier sont jugées trop vieilles et l'appli redemande à Keepa (le fichier est remis à jour le 1er et le 15 du mois). */
+export const PEPITE_MAX_AGE_DAYS = 18;
 
 const cents = (v: string) => {
   const n = Math.round(Number(v.replace(",", ".")) * 100);
