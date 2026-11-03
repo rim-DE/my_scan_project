@@ -36,12 +36,12 @@ Règles communes :
 | --- | --- | --- | --- |
 | dans ma liste | ⭐ Liste pépites | oui, tout de suite, tiré du fichier sans jeton Keepa | rien, tout est là |
 | ajouté à la main | ⭐ Liste pépites | oui, demandé à Keepa | « ✖ Retirer de ma liste » |
-| hors liste, jamais vu | aucun | non : « pas dans ta liste » | « ⭐ Ajouter à ma liste » ou « Actualiser les prix » |
+| hors liste, pas encore identifié | « Pas dans ta liste · pas encore identifié » | non, seulement le titre lu sur la tranche | « 🔎 Identifier ce livre » (gratuit), puis « ⭐ Ajouter à ma liste » ou « Actualiser les prix » |
+| hors liste, identifié | aucun | non : « pas dans ta liste » | « ⭐ Ajouter à ma liste » ou « Actualiser les prix » |
 | hors liste, déjà vu avant | aucun | l'ancien prix, qui n'est plus mis à jour | regarder la date, « Actualiser les prix » si besoin |
-| non identifié | — | non | « Réessayer les non identifiés » |
+| introuvable dans les catalogues | « Non identifié » (rouge) | non | chercher à la main, ou scanner son code-barres |
 
-- Le message **« Terminé »** veut dire que la photo est lue. L'identification des livres hors liste peut continuer après, et la page se met à jour toute seule.
-- Un livre est d'abord cherché dans ma liste par son titre et son ISBN. Les autres sont cherchés dans les catalogues (Google Books, Open Library…).
+- **Le scan est fini dès que la photo est lue.** Les livres de ma liste sont reconnus tout de suite, par leur titre ou leur ISBN. Les autres ne sont cherchés dans les catalogues (Google Books, Open Library…) que si je clique sur « 🔎 Identifier ce livre ». Le bouton « Identifier tous les livres restants » les cherche tous d'un coup, mais c'est long.
 - La couverture vient du catalogue, sinon d'Amazon ou d'Open Library par l'ISBN. 📕 veut dire qu'aucune couverture n'a été trouvée.
 
 ## 4. Lire une fiche au moment d'acheter

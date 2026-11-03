@@ -6,7 +6,7 @@ import { fmt } from "@/lib/i18n";
 import type { DetectionView } from "@/lib/queries";
 import { formatPrice } from "@/lib/money";
 import { PLATFORM_BY_ID, PLATFORMS, platformName, siteLinks } from "@/lib/prices/platforms";
-import { addManualPriceAction, addToListAction, addToStockAction, deletePriceAction, refreshPricesAction, saveNoteAction, setManualPepiteAction } from "@/app/actions";
+import { addManualPriceAction, addToListAction, addToStockAction, deletePriceAction, identifyDetectionAction, refreshPricesAction, saveNoteAction, setManualPepiteAction } from "@/app/actions";
 import { shortAge } from "@/lib/prices/metrics";
 import { BookCover } from "./BookCover";
 import { BooksIcon, LocationView, LocateIcon, MoreIcon, SalesHistory, Sheet, SiteLogo, SitesSheet, type PhotoInfo } from "./BookPanels";
@@ -73,9 +73,25 @@ export function BookCard({ detection, photo, photos = [], t, country, lists, pat
           <div className="min-w-0 flex-1" />
           {icons}
         </div>
-        <p className="text-xs font-semibold uppercase text-red-600">{t.scan.unidentified}</p>
+        {detection.lookupTries ? (
+          <p className="text-xs font-semibold uppercase text-red-600">{t.scan.unidentified}</p>
+        ) : (
+          <p className="text-xs font-semibold uppercase text-slate-500">{t.scan.notIdentifiedYet}</p>
+        )}
         <p className="font-medium">{detection.rawTitle}</p>
         {detection.rawAuthor && <p className="text-sm text-slate-500">{detection.rawAuthor}</p>}
+        {detection.rawTitle && (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              className="btn-outline text-sm"
+              disabled={pending}
+              onClick={() => start(() => identifyDetectionAction(detection.id, path))}
+            >
+              {pending ? t.scan.identifyingOne : t.scan.identifyOne}
+            </button>
+            {!pending && !!detection.lookupTries && <span className="text-xs text-slate-500">{t.scan.identifyOneFailed}</span>}
+          </div>
+        )}
         {locateSheet}
       </article>
     );
