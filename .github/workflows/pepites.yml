@@ -1,11 +1,11 @@
-# Met à jour data/pepites.csv depuis Keepa le 1er et le 15 du mois, en 3 passages de 4 000 livres au plus
+# Met à jour data/pepites.csv depuis Keepa le 1er et le 15 du mois, en 6 passages de 4 000 livres au plus (toutes les 4 h)
 # (voir scripts/pepites.ts),
 # ou à la demande : onglet Actions > « Pépites Keepa » > Run workflow.
 name: Pépites Keepa
 
 on:
   schedule:
-    - cron: "15 1,7,13 1,15 * *"
+    - cron: "15 1,5,9,13,17,21 1,15 * *"
   workflow_dispatch:
     inputs:
       max:

@@ -3,11 +3,12 @@
 //   KEEPA_API_KEY=… npm run pepites
 //   npm run pepites -- --max 200        (essai : 200 livres au plus)
 //
-// Lancé le 1er et le 15 du mois (3 passages ce jour-là) par .github/workflows/pepites.yml. Coût : environ 1 jeton
+// Lancé le 1er et le 15 du mois (6 passages ce jour-là, toutes les 4 h) par .github/workflows/pepites.yml. Coût : environ 1 jeton
 // Keepa par livre. Keepa redonne 20 jetons par minute (1 200 par heure) : le script attend tout seul quand il n'en a plus.
 // Un passage prend au plus MAX_PER_RUN fiches : les livres nouveaux d'abord, puis ceux dont les infos ont plus de
 // STALE_DAYS jours. Chaque livre est ainsi remis à jour toutes les deux semaines.
-// Un livre vendu moins de MIN_SALES_180 fois en 6 mois sort du fichier ; il est noté dans ECARTES pour ne pas
+// Un livre vendu moins de MIN_SALES_180 fois en 6 mois sort du fichier (sauf s'il vaut 50 € et plus et s'est
+// vendu au moins une fois en 2 ans, voir sellsEnough) ; il est noté dans ECARTES pour ne pas
 // être rechargé à chaque passage, et sera revu deux semaines plus tard (il revient s'il se vend de nouveau).
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
@@ -86,7 +87,7 @@ async function findAsins(): Promise<string[]> {
       );
       const list = json.asinList ?? [];
       list.forEach((a) => found.add(a));
-      console.log(`Tranche ${band.min / 100} € et + (page ${page}) : ${list.length} livres sur ${json.totalResults ?? "?"}`);
+      console.log(`Tranche ${band.min / 100} € et +${band.language === "english" ? " (anglais)" : ""}${band.minRank ? ` (rang ${band.minRank}+)` : ""} (page ${page}) : ${list.length} livres sur ${json.totalResults ?? "?"}`);
       if (list.length < PER_PAGE) break;
     }
   }
@@ -117,7 +118,7 @@ async function main() {
   const result = () => {
     const rows = mergeRows(previous, fresh);
     for (const r of rows) if (!sellsEnough(r)) rejected.set(r.asin, today);
-    return rows.filter(sellsEnough);
+    return rows.filter((r) => sellsEnough(r));
   };
   for (let i = 0; i < asins.length; i += BATCH) {
     const batch = asins.slice(i, i + BATCH);
@@ -136,7 +137,7 @@ async function main() {
   }
   const rows = result();
   await save(rows, rejected);
-  console.log(`${FILE} : ${rows.length} livres (${fresh.length} mis à jour, ${rejected.size} écartés : moins de ${MIN_SALES_180} ventes en 6 mois)`);
+  console.log(`${FILE} : ${rows.length} livres (${fresh.length} mis à jour, ${rejected.size} écartés : moins de ${MIN_SALES_180} ventes en 6 mois, ou livre à 50 € et plus pas vendu en 2 ans)`);
 }
 
 async function save(rows: PepiteRow[], rejected: Map<string, string>) {
