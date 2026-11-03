@@ -64,7 +64,8 @@ export async function processScan(scanId: string): Promise<void> {
         });
       // Google Vision lit toute la photo d'un coup (souvent plus de 100 livres) : on ne lance pas d'identification
       // pendant la lecture, ils sont identifiés ensuite par paquets (fillMissingPrices, relancé par la page du scan et par le cron).
-      const identifyNow = env.visionProvider() !== "google-vision";
+      // Mode rapide : l'identification ne cherche que dans la liste de pépites (en mémoire, instantané), on la fait pour tous.
+      const identifyNow = env.visionProvider() !== "google-vision" || env.pepitesOnly();
       // Identifications en cours : chaque livre est enregistré sans attendre la sienne, et complété dès qu'elle arrive.
       // Sinon, un catalogue en panne (Google Books 503, Sudoc injoignable) bloque l'enregistrement jusqu'à la coupure à 300 s.
       const pending: Promise<void>[] = [];

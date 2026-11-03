@@ -302,6 +302,9 @@ const words = (s: string) =>
 /** Titre principal, sans sous-titre ni mention d'édition (« Frieren T14 - édition collector » → « Frieren T14 »). */
 const mainTitle = (t: string) => t.split(/\s*:\s+|\s+[-–]\s+|\s*[(\[]/)[0];
 
+/** Mots d'édition, jamais écrits sur la tranche (« La Philosophie pour les Nuls, Nouvelle édition ») : ignorés dans le titre principal. */
+const EDITION_WORDS = new Set(["nouvelle", "edition", "editions", "revue", "augmentee", "corrigee", "actualisee", "poche", "illustree", "integrale"]);
+
 export interface PepiteTitles {
   row: PepiteRow;
   all: Set<string>;
@@ -313,7 +316,7 @@ export interface PepiteTitles {
 export function pepiteTitles(rows: PepiteRow[]): PepiteTitles[] {
   return rows
     .filter((row) => row.titre)
-    .map((row) => ({ row, all: new Set(words(row.titre)), main: [...new Set(words(mainTitle(row.titre)))], authors: new Set(words(row.auteur)) }));
+    .map((row) => ({ row, all: new Set(words(row.titre)), main: [...new Set(words(mainTitle(row.titre)).filter((w) => !EDITION_WORDS.has(w)))], authors: new Set(words(row.auteur)) }));
 }
 
 /**
@@ -327,11 +330,14 @@ export function findPepiteByTitle(titles: PepiteTitles[], title: string, author?
   const surname = author ? words(author).at(-1) : undefined;
   let best: { row: PepiteRow; score: number; tie: boolean } | null = null;
   for (const p of titles) {
-    const readCovered = read.filter((w) => p.all.has(w)).length / read.length;
+    // La tranche porte souvent le nom de l'auteur avec le titre (« Roland Barthes LA CHAMBRE CLAIRE ») : ses mots comptent.
+    const readCovered = read.filter((w) => p.all.has(w) || p.authors.has(w)).length / read.length;
     if (readCovered < 0.8) continue;
     const mainCovered = p.main.length ? p.main.filter((w) => read.includes(w)).length / p.main.length : 0;
     const authorKnown = surname !== undefined && p.authors.size > 0;
-    const authorOk = authorKnown && p.authors.has(surname!);
+    // Sans auteur lu à part, son nom de famille dans le titre lu (et pas dans le titre du livre) le confirme.
+    const authorInTitle = !authorKnown && read.some((w) => p.authors.has(w) && !p.all.has(w) && w.length > 2);
+    const authorOk = (authorKnown && p.authors.has(surname!)) || authorInTitle;
     if (authorKnown && !authorOk) continue;
     // Sans auteur pour confirmer, il faut un titre lu de plusieurs mots et presque tout le titre principal.
     if (mainCovered < (authorOk ? 0.6 : 0.8) || (!authorOk && read.length < 2)) continue;
