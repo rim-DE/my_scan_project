@@ -170,7 +170,7 @@ export const fr = {
     inPepites: "Liste pépites",
     addToPepites: "Ajouter à ma liste",
     removeFromPepites: "Retirer de ma liste",
-    inPepitesHelp: "Ce livre est dans ta liste de pépites Keepa (livres à 25 € et plus qui se vendent, ou ajoutés par toi), mise à jour chaque lundi.",
+    inPepitesHelp: "Ce livre est dans ta liste de pépites Keepa (livres à 10 € et plus vendus au moins 3 fois en 6 mois, ou ajoutés par toi), mise à jour le 1er et le 15 du mois.",
     banger: "Pépite",
     bangerHelp: "Livre intéressant à la revente : prix ≥ 35 €, au moins 3 ventes sur 12 mois, ratio ≥ 1,2, et offre actuelle absente ou ≥ 27 €.",
     salesRank: "Rang",

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { findPepite, findPepiteByTitle, isAdultTitle, finderSelection, pepiteTitles, indexPepites, isFreshPepite, mergeRows, parseCsv, pepiteResult, pepiteRow, toCsv } from "../pepites";
+import { BANDS, MIN_SALES_180, sellsEnough, findPepite, findPepiteByTitle, isAdultTitle, finderSelection, pepiteTitles, indexPepites, isFreshPepite, mergeRows, parseCsv, pepiteResult, pepiteRow, toCsv } from "../pepites";
 
 // Temps Keepa = minutes depuis 2011 ; 2026-10-01 ≈ 8 207 000.
 const t = (iso: string) => new Date(iso).getTime() / 60000 - 21564000;
@@ -74,6 +74,9 @@ describe("pépites", () => {
   it("borne la tranche de prix quand il y a un maximum", () => {
     expect(finderSelection({ min: 2500, max: 3499 }, 0, 100)).toMatchObject({ current_USED_gte: 2500, current_USED_lte: 3499, avg90_NEW_gte: 2500 });
     expect(finderSelection({ min: 3500 }, 0, 100)).not.toHaveProperty("current_USED_lte");
+    expect(finderSelection({ min: 3500 }, 0, 100)).toMatchObject({ languages: ["french"], avg180_SALES_lte: 400000 });
+    const english = BANDS.find((b) => b.language === "english")!;
+    expect(finderSelection(english, 0, 100)).toMatchObject({ languages: ["english"], avg180_SALES_lte: 150000, current_USED_gte: 2500 });
   });
 
   it("remplace un appel Keepa par la ligne du fichier", () => {
@@ -90,7 +93,7 @@ describe("pépites", () => {
     expect(r.info).toMatchObject({ offerCount: 7, salesRank: 20000, listPriceCents: 5500 });
     expect(r.info).not.toHaveProperty("rating");
     expect(isFreshPepite(row, new Date("2026-11-10"))).toBe(true);
-    expect(isFreshPepite(row, new Date("2026-11-20"))).toBe(false);
+    expect(isFreshPepite(row, new Date("2026-11-25"))).toBe(false);
   });
 
   it("retrouve un livre du fichier par ISBN-13 ou ASIN", () => {
@@ -152,5 +155,14 @@ describe("livres pour adultes", () => {
 
   it("exclut les catégories érotiques de la recherche Keepa", () => {
     expect(finderSelection({ min: 1000, max: 1499 }, 0, 500).categories_exclude).toContain(588062);
+  });
+});
+
+describe("règle de ventes", () => {
+  it("garde les livres vendus au moins 3 fois en 6 mois", () => {
+    expect(MIN_SALES_180).toBe(3);
+    expect(sellsEnough({ ventes_180j: "3" } as never)).toBe(true);
+    expect(sellsEnough({ ventes_180j: "2" } as never)).toBe(false);
+    expect(sellsEnough({ ventes_180j: "" } as never)).toBe(false);
   });
 });
