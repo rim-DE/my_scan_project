@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BANDS, MIN_SALES_180, sellsEnough, findPepite, findPepiteByTitle, isAdultTitle, finderSelection, pepiteTitles, indexPepites, isFreshPepite, mergeRows, parseCsv, pepiteResult, pepiteRow, toCsv } from "../pepites";
+import { BANDS, MIN_SALES_180, medianSaleCents, sellsEnough, findPepite, findPepiteByTitle, isAdultTitle, finderSelection, pepiteTitles, indexPepites, isFreshPepite, mergeRows, parseCsv, pepiteResult, pepiteRow, toCsv } from "../pepites";
 
 // Temps Keepa = minutes depuis 2011 ; 2026-10-01 ≈ 8 207 000.
 const t = (iso: string) => new Date(iso).getTime() / 60000 - 21564000;
@@ -169,5 +169,23 @@ describe("règle de ventes", () => {
     expect(sellsEnough({ ventes_180j: "3" } as never)).toBe(true);
     expect(sellsEnough({ ventes_180j: "2" } as never)).toBe(false);
     expect(sellsEnough({ ventes_180j: "" } as never)).toBe(false);
+  });
+
+  it("garde un livre à 50 € et plus vendu au moins une fois en 2 ans", () => {
+    const now = new Date("2026-11-03");
+    const rare = { ventes_180j: "1", derniere_vente: "2025-06-01", dernieres_ventes: "2024-01-10=48,00|2025-06-01=62,00|2023-03-01=55,00" };
+    expect(medianSaleCents(rare)).toBe(5500);
+    expect(sellsEnough(rare as never, now)).toBe(true);
+    // Dernière vente il y a plus de 2 ans : écarté.
+    expect(sellsEnough({ ...rare, derniere_vente: "2024-10-01" } as never, now)).toBe(false);
+    // Moins de 50 € : la règle des 3 ventes s'applique.
+    expect(sellsEnough({ ...rare, dernieres_ventes: "2025-06-01=25,53" } as never, now)).toBe(false);
+    expect(sellsEnough({ ventes_180j: "0", derniere_vente: "", dernieres_ventes: "" } as never, now)).toBe(false);
+  });
+
+  it("cherche les livres chers qui se vendent lentement", () => {
+    const slow = BANDS.filter((b) => b.minRank);
+    expect(slow.length).toBeGreaterThan(0);
+    expect(finderSelection(slow[0], 0, 100)).toMatchObject({ current_USED_gte: 5000, avg180_SALES_gte: 400001, languages: ["french"] });
   });
 });

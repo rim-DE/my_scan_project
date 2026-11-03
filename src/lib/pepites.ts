@@ -13,6 +13,8 @@ export interface PriceBand {
   language?: "french" | "english";
   /** Rang de ventes Amazon moyen sur 6 mois à ne pas dépasser (par défaut 400 000). */
   maxRank?: number;
+  /** Rang moyen sur 6 mois à partir duquel la tranche commence (livres qui se vendent lentement). */
+  minRank?: number;
 }
 
 /** Tranches chargées. Pour en ajouter une (ex. 25-35 €) : { min: 2500, max: 3499 }. */
@@ -25,11 +27,35 @@ export const BANDS: PriceBand[] = [
   { min: 1500, max: 2499 },
   { min: 1000, max: 1499 },
   { min: 2500, language: "english", maxRank: 150000 },
+  // Livres chers qui se vendent lentement (règle du 3/11/2026, voir sellsEnough) : 50 à 300 €, rang moyen
+  // entre 400 000 et 1,5 million (≈ 6 300 + 4 600 livres le 3/11/2026, avant le tri par ventes).
+  { min: 5000, max: 30000, minRank: 400001, maxRank: 1000000 },
+  { min: 5000, max: 30000, minRank: 1000001, maxRank: 1500000 },
 ];
 
 /** Ventes minimum sur les 6 derniers mois pour rester dans la liste (règle choisie par rim le 3/11/2026). */
 export const MIN_SALES_180 = 3;
-export const sellsEnough = (row: PepiteRow) => Number(row.ventes_180j || 0) >= MIN_SALES_180;
+/** Exception (rim, 3/11/2026) : un livre vendu en médiane 50 € ou plus reste s'il s'est vendu au moins une fois en 2 ans. */
+export const EXPENSIVE_CENTS = 5000;
+export const RARE_SALE_DAYS = 730;
+
+/** Prix médian (centimes) des dernières ventes notées dans la ligne (« 2026-09-12=39,90|… »). */
+export function medianSaleCents(row: Pick<PepiteRow, "dernieres_ventes">): number | null {
+  const prices = (row.dernieres_ventes ?? "")
+    .split("|")
+    .map((s) => Math.round(Number(s.split("=")[1]?.replace(",", ".")) * 100))
+    .filter((c) => c > 0)
+    .sort((a, b) => a - b);
+  if (!prices.length) return null;
+  const m = prices.length >> 1;
+  return prices.length % 2 ? prices[m] : Math.round((prices[m - 1] + prices[m]) / 2);
+}
+
+export function sellsEnough(row: PepiteRow, now = new Date()): boolean {
+  if (Number(row.ventes_180j || 0) >= MIN_SALES_180) return true;
+  const since = new Date(now.getTime() - RARE_SALE_DAYS * 24 * 3600 * 1000).toISOString().slice(0, 10);
+  return Boolean(row.derniere_vente && row.derniere_vente >= since && (medianSaleCents(row) ?? 0) >= EXPENSIVE_CENTS);
+}
 
 /** Catégories amazon.fr écartées d'emblée : BD érotiques, romans érotiques, érotique. */
 const EXCLUDED_CATEGORIES = [574008, 588062, 470906];
@@ -49,6 +75,7 @@ export function finderSelection(band: PriceBand, page: number, perPage: number) 
     // Moyenne sur 90 jours, pas le prix du jour : écarte les livres dont le prix neuf vient juste de flamber.
     avg90_NEW_gte: band.min,
     buyBoxIsAmazon: false,
+    ...(band.minRank ? { avg180_SALES_gte: band.minRank } : {}),
     avg180_SALES_lte: band.maxRank ?? 400000,
     current_SALES_gte: 1,
     sort: [["avg180_SALES", "asc"]],

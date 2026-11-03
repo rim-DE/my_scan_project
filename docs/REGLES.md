@@ -4,7 +4,7 @@
 
 ## 1. Ma liste de pépites
 
-La liste contient environ 8 500 livres : à peu près 7 900 en français et quelques centaines en anglais. Le chiffre exact sera connu à la fin du passage du 3/11. Elle est construite à partir d'Amazon.fr, via Keepa, dans le fichier [`data/pepites.csv`](../data/pepites.csv).
+La liste contient 8 170 livres au 3/11 (avant l'ajout des livres chers qui se vendent lentement, voir ci-dessous). Le chiffre sera remis à jour à la fin de leur chargement. Elle est construite à partir d'Amazon.fr, via Keepa, dans le fichier [`data/pepites.csv`](../data/pepites.csv).
 
 | | Livres en français | Livres en anglais |
 | --- | --- | --- |
@@ -12,6 +12,8 @@ La liste contient environ 8 500 livres : à peu près 7 900 en français et quel
 | Prix neuf moyen sur 90 jours | au moins le bas de la tranche | au moins 25 € |
 | Classement des ventes Amazon (moyenne 6 mois) | meilleur que 400 000 | meilleur que 150 000 |
 | Ventes sur les 6 derniers mois | au moins 3 | au moins 3 |
+
+**Exception pour les livres chers** : un livre dont le prix médian de vente est de **50 € ou plus** reste dans la liste s'il s'est vendu **au moins une fois en 2 ans**, même s'il a moins de 3 ventes en 6 mois. Je les achète souvent autour de 1 €, donc le risque est faible. Pour les trouver, l'appli cherche aussi les livres en français vendus 50 à 300 € d'occasion dont le classement moyen est entre 400 000 et 1,5 million.
 
 Règles communes :
 
@@ -23,9 +25,9 @@ Règles communes :
 
 ## 2. Mise à jour
 
-- **Quand** : le 1er et le 15 de chaque mois, toute seule, en 3 passages ce jour-là (vers 2 h, 8 h et 14 h, heure de Paris).
+- **Quand** : le 1er et le 15 de chaque mois, toute seule, en 6 passages ce jour-là, toutes les 4 heures (vers 2 h, 6 h, 10 h, 14 h, 18 h et 22 h, heure de Paris).
 - **Quoi** : les nouveaux livres qui remplissent les règles sont ajoutés. Chaque livre déjà présent est remis à jour tous les 14 jours : prix, ventes, classement.
-- **Sortie de la liste** : un livre vendu moins de 3 fois en 6 mois sort de la liste. Il est revu deux semaines plus tard et revient s'il se vend de nouveau.
+- **Sortie de la liste** : un livre vendu moins de 3 fois en 6 mois sort de la liste, sauf un livre à 50 € et plus vendu au moins une fois en 2 ans. Il est revu deux semaines plus tard et revient s'il se vend de nouveau.
 - **Jamais supprimés** : les livres que j'ai ajoutés à la main. Ils sont enregistrés dans l'appli, pas dans le fichier.
 - **À la demande** : GitHub, onglet Actions, « Pépites Keepa », bouton « Run workflow » en laissant la case vide.
 - **Coût** : environ 1 jeton Keepa par livre mis à jour. C'est compris dans mon abonnement Keepa et ne coûte rien de plus.
