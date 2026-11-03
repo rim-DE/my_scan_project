@@ -115,8 +115,15 @@ describe("liens vers les annonces (fenêtre « … »)", () => {
     expect(links.find((l) => l.id === "amazon")).toMatchObject({ priceCents: 2640, priceKind: "offer" });
     expect(links.find((l) => l.id === "momox")).toMatchObject({ priceCents: 676, priceKind: "buyback" });
     expect(links.find((l) => l.id === "fnac")!.priceCents).toBeNull();
-    // Tous les sites, Leboncoin et Vinted compris, sont cherchés par ISBN.
-    for (const l of links) if (l.id !== "amazon") expect(l.url).toContain("9782253088578");
+    // Tous les sites, Vinted compris, sont cherchés par ISBN ; Leboncoin par titre et auteur.
+    for (const l of links) if (l.id !== "amazon" && l.id !== "leboncoin") expect(l.url).toContain("9782253088578");
+  });
+
+  it("cherche Leboncoin par titre et auteur", () => {
+    const url = siteLinks({ isbn13: "9782253088578", title: "Le livre", author: "Camus" }, []).find((l) => l.id === "leboncoin")!.url;
+    expect(url).toBe(`https://www.leboncoin.fr/recherche?category=27&text=${encodeURIComponent("Le livre Camus")}`);
+    const symboles = siteLinks({ isbn13: "9782221503195", title: "Dictionnaire des symboles: Mythes, rêves", author: "Jean Chevalier" }, []);
+    expect(symboles.find((l) => l.id === "leboncoin")!.url).toContain(encodeURIComponent("Dictionnaire des symboles Jean Chevalier"));
   });
 
   it("sans ISBN, cherche par titre et auteur et retire les sites qui exigent un ISBN", () => {
