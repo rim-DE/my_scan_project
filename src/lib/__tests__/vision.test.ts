@@ -134,6 +134,21 @@ describe("découpage en bandes", () => {
     expect(mergeTiles([tilted, thin])).toHaveLength(2);
   });
 
+  it("garde une seule fois un titre lu par deux morceaux même si les rectangles sont décalés", () => {
+    const a = cleanDetections([book({ title: "SERVICES SPÉCIAUX", corners: quad(400, 100, 440, 900) })], SIZE);
+    const b = cleanDetections([book({ title: "Services spéciaux", corners: quad(430, 500, 470, 1300) })], SIZE);
+    expect(mergeTiles([a, b])).toHaveLength(1);
+    const c = cleanDetections([book({ title: "Bonsaï", corners: quad(405, 150, 440, 850) })], SIZE);
+    const d = cleanDetections([book({ title: "Bonsaï d'intérieur", corners: quad(400, 100, 440, 900) })], SIZE);
+    expect(mergeTiles([c, d]).map((x) => x.title)).toEqual(["Bonsaï d'intérieur"]);
+  });
+
+  it("garde deux exemplaires du même titre rangés à deux endroits", () => {
+    const a = cleanDetections([book({ title: "La Belle Époque", corners: quad(100, 100, 140, 900) })], SIZE);
+    const b = cleanDetections([book({ title: "La Belle Époque", corners: quad(600, 100, 640, 900) })], SIZE);
+    expect(mergeTiles([a, b])).toHaveLength(2);
+  });
+
   it("remet les livres dans l'ordre : étagère par étagère, de gauche à droite", () => {
     const b = (title: string, x: number, y: number) => cleanDetections([book({ title, corners: quad(x, y, x + 30, y + 400) })], SIZE)[0];
     const out = readingOrder([b("DD", 100, 1200), b("BB", 300, 100), b("CC", 50, 1180), b("AA", 100, 120)]);
