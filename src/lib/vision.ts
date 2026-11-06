@@ -102,41 +102,61 @@ export function cleanDetections(books: DetectedBook[], size: { width: number; he
   return out;
 }
 
-/** Bande verticale de la photo envoyée seule au modèle (en pixels de la photo entière). */
+/** Morceau de la photo envoyé seul au modèle (en pixels de la photo entière). */
 export interface Tile {
   left: number;
   width: number;
+  /** Absents : toute la hauteur de la photo. */
+  top?: number;
+  height?: number;
 }
 
-/** Recouvrement entre deux bandes voisines : plus large qu'une tranche, pour qu'aucun livre ne soit coupé partout. */
+/** Recouvrement entre deux colonnes voisines : plus large qu'une tranche, pour qu'aucun livre ne soit coupé partout. */
 const TILE_OVERLAP = 0.15;
+/** Recouvrement entre deux rangées : plus haut qu'un livre debout (une étagère fait environ 1/5 de la photo). */
+const ROW_OVERLAP = 0.2;
+
+/** Positions de n morceaux de longueur égale qui se recouvrent et couvrent [0, size]. */
+function spans(size: number, n: number, overlapRatio: number): { start: number; length: number }[] {
+  if (n === 1) return [{ start: 0, length: size }];
+  const overlap = Math.round(size * overlapRatio);
+  const length = Math.ceil((size + overlap * (n - 1)) / n);
+  return Array.from({ length: n }, (_, i) => ({ start: Math.min(i * (length - overlap), size - length), length }));
+}
 
 /**
- * Découpe une photo d'étagère en bandes verticales analysées en parallèle : le modèle écrit sa réponse
- * livre par livre, donc 2 ou 3 bandes vont 2 à 3 fois plus vite qu'une seule grande réponse.
- * Les tranches étant surtout verticales, une coupe verticale avec recouvrement les garde entières dans une bande.
+ * Découpe une photo d'étagère en morceaux analysés en parallèle. Une bibliothèque entière compte plus de 200 livres :
+ * dans un seul morceau, le modèle en oublie beaucoup (scan du 6/11/2026 : 130 lus contre 225 pour BiblioScan).
+ * Des morceaux d'environ 40 livres, vus en plus grand, sont mieux lus et vont plus vite (réponses plus courtes, en parallèle).
+ * Colonnes : 2 (3 pour une photo très large). Rangées : autant qu'il faut pour des morceaux à peu près carrés, 3 au plus.
  */
 export function tileLayout(width: number, height: number): Tile[] {
-  const n = width < 1200 ? 1 : width / height > 1.6 ? 3 : 2;
-  if (n === 1) return [{ left: 0, width }];
-  const overlap = Math.round(width * TILE_OVERLAP);
-  const w = Math.ceil((width + overlap * (n - 1)) / n);
-  return Array.from({ length: n }, (_, i) => {
-    const left = Math.min(i * (w - overlap), width - w);
-    return { left, width: w };
-  });
+  const cols = width < 1200 ? 1 : width / height > 1.6 ? 3 : 2;
+  const colWidth = width / cols;
+  const rows = height < 1200 ? 1 : Math.min(3, Math.max(1, Math.ceil(height / colWidth)));
+  if (cols === 1 && rows === 1) return [{ left: 0, width }];
+  const xs = spans(width, cols, TILE_OVERLAP);
+  const ys = spans(height, rows, ROW_OVERLAP);
+  return ys.flatMap((y) => xs.map((x) => (rows === 1 ? { left: x.start, width: x.length } : { left: x.start, width: x.length, top: y.start, height: y.length })));
 }
 
 /**
- * Livres d'une bande qu'aucune autre bande ne voit, même en partie : ils ne peuvent pas être des doublons et
- * seront forcément gardés par mergeTiles, on peut donc les identifier sans attendre les autres bandes.
+ * Livres d'un morceau qu'aucun autre morceau ne voit, même en partie : ils ne peuvent pas être des doublons et
+ * seront forcément gardés par mergeTiles, on peut donc les identifier sans attendre les autres morceaux.
  */
-export function soloBooks(books: CleanDetection[], tileIndex: number, tiles: Tile[], width: number): CleanDetection[] {
+export function soloBooks(books: CleanDetection[], tileIndex: number, tiles: Tile[], width: number, height = 1): CleanDetection[] {
   return books.filter((b) => {
     if (!b.bbox) return false;
     const left = b.bbox.x * width;
     const right = (b.bbox.x + b.bbox.w) * width;
-    return tiles.every((t, j) => j === tileIndex || right <= t.left || left >= t.left + t.width);
+    const top = b.bbox.y * height;
+    const bottom = (b.bbox.y + b.bbox.h) * height;
+    return tiles.every((t, j) => {
+      if (j === tileIndex) return true;
+      const apartX = right <= t.left || left >= t.left + t.width;
+      const apartY = t.top !== undefined && (bottom <= t.top || top >= t.top + (t.height ?? height));
+      return apartX || apartY;
+    });
   });
 }
 
@@ -382,19 +402,21 @@ export async function detectBooks(
   const tiles = tileLayout(size.width, size.height);
   const perTile = await Promise.all(
     tiles.map(async (tile, i) => {
+      const top = tile.top ?? 0;
+      const height = tile.height ?? size.height;
       const crop =
         tiles.length === 1
           ? jpeg
-          : await sharp(jpeg).extract({ left: tile.left, top: 0, width: tile.width, height: size.height }).jpeg({ quality: 90 }).toBuffer();
-      // Chaque bande est réduite à la taille maximale lue par le modèle.
-      const image = await toModelSize(crop, tile.width, size.height);
+          : await sharp(jpeg).extract({ left: tile.left, top, width: tile.width, height }).jpeg({ quality: 90 }).toBuffer();
+      // Chaque morceau est réduit à la taille maximale lue par le modèle.
+      const image = await toModelSize(crop, tile.width, height);
       const books = await callModel(image, (f) => SHELF_PROMPT(opts.language, f));
-      // Coordonnées de la bande réduite -> coordonnées de la photo entière.
+      // Coordonnées du morceau réduit -> coordonnées de la photo entière.
       const sx = tile.width / image.width;
-      const sy = size.height / image.height;
-      const shifted = books.map((b) => ({ ...b, corners: b.corners.map((c) => ({ x: c.x * sx + tile.left, y: c.y * sy })) }));
+      const sy = height / image.height;
+      const shifted = books.map((b) => ({ ...b, corners: b.corners.map((c) => ({ x: c.x * sx + tile.left, y: c.y * sy + top })) }));
       const clean = cleanDetections(shifted, size);
-      opts.onSure?.(tiles.length === 1 ? clean : soloBooks(clean, i, tiles, size.width));
+      opts.onSure?.(tiles.length === 1 ? clean : soloBooks(clean, i, tiles, size.width, size.height));
       return clean;
     }),
   );

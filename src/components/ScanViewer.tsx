@@ -188,10 +188,12 @@ export function ScanViewer({ photos, detections, t, country, lists, path, locale
                       className="cursor-pointer"
                       onClick={() => pickOnPhoto(d.id)}
                       vectorEffect="non-scaling-stroke"
-                      strokeWidth={isSel ? 3 : 1.5}
+                      // Seul le livre choisi est encadré (rim trouve les grands rectangles gênants) ; les autres restent
+                      // cliquables mais invisibles.
+                      strokeWidth={isSel ? 3 : 0}
                       strokeLinejoin="round"
-                      stroke={isSel ? "#c026d3" : d.book ? "#dc2626" : "#f59e0b"}
-                      fill={isSel ? "rgba(217,70,239,0.45)" : d.book ? "rgba(34,197,94,0.45)" : "rgba(245,158,11,0.25)"}
+                      stroke={isSel ? "#c026d3" : "none"}
+                      fill={isSel ? "rgba(217,70,239,0.35)" : "transparent"}
                     >
                       <title>{d.book?.title ?? d.rawTitle ?? ""}</title>
                     </polygon>

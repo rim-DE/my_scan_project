@@ -65,22 +65,40 @@ describe("détection", () => {
 });
 
 describe("découpage en bandes", () => {
-  it("coupe les grandes photos en 2 ou 3 bandes qui se recouvrent et couvrent toute la largeur", () => {
+  it("coupe les grandes photos en morceaux qui se recouvrent et couvrent toute la photo", () => {
     expect(tileLayout(800, 1000)).toEqual([{ left: 0, width: 800 }]);
-    for (const [w, h, n] of [
-      [1456, 2576, 2],
-      [2576, 1456, 3],
-      [2000, 1500, 2],
+    for (const [w, h, cols, rows] of [
+      [3000, 4000, 2, 3], // bibliothèque en portrait : 6 morceaux d'environ 40 livres
+      [1456, 2576, 2, 3],
+      [2576, 1456, 3, 2],
+      [2000, 1000, 3, 1],
     ]) {
       const tiles = tileLayout(w, h);
-      expect(tiles).toHaveLength(n);
-      expect(tiles[0].left).toBe(0);
-      expect(tiles.at(-1)!.left + tiles.at(-1)!.width).toBe(w);
-      for (let i = 1; i < tiles.length; i++) {
-        // Recouvrement d'au moins 15 % de la largeur entre deux bandes voisines.
-        expect(tiles[i - 1].left + tiles[i - 1].width - tiles[i].left).toBeGreaterThanOrEqual(Math.round(w * 0.15));
+      expect(tiles).toHaveLength(cols * rows);
+      expect(Math.max(...tiles.map((t) => t.left + t.width))).toBe(w);
+      expect(Math.min(...tiles.map((t) => t.left))).toBe(0);
+      if (rows > 1) {
+        expect(Math.min(...tiles.map((t) => t.top!))).toBe(0);
+        expect(Math.max(...tiles.map((t) => t.top! + t.height!))).toBe(h);
+        // Deux rangées voisines se recouvrent d'au moins 20 % de la hauteur (un livre debout entier).
+        const tops = [...new Set(tiles.map((t) => t.top!))].sort((a, b) => a - b);
+        expect(tops[0] + tiles[0].height! - tops[1]).toBeGreaterThanOrEqual(Math.round(h * 0.2));
       }
+      const lefts = [...new Set(tiles.map((t) => t.left))].sort((a, b) => a - b);
+      for (let i = 1; i < lefts.length; i++) expect(lefts[i - 1] + tiles[0].width - lefts[i]).toBeGreaterThanOrEqual(Math.round(w * 0.15));
     }
+  });
+
+  it("ne lance tôt que les livres qu'aucun autre morceau ne voit, aussi en hauteur", () => {
+    const tiles = [
+      { left: 0, width: 1000, top: 0, height: 600 },
+      { left: 0, width: 1000, top: 400, height: 600 },
+    ];
+    const books = cleanDetections(
+      [book({ title: "En haut", corners: quad(100, 50, 140, 350) }), book({ title: "Entre deux", corners: quad(300, 350, 340, 550) })],
+      SIZE,
+    );
+    expect(soloBooks(books, 0, tiles, SIZE.width, SIZE.height).map((b) => b.title)).toEqual(["En haut"]);
   });
 
   it("garde une seule fois un livre vu dans deux bandes, et deux livres voisins distincts", () => {
