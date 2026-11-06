@@ -72,7 +72,8 @@ describe("pépites", () => {
   });
 
   it("borne la tranche de prix quand il y a un maximum", () => {
-    expect(finderSelection({ min: 2500, max: 3499 }, 0, 100)).toMatchObject({ current_USED_gte: 2500, current_USED_lte: 3499, avg90_NEW_gte: 2500 });
+    expect(finderSelection({ min: 2500, max: 3499 }, 0, 100)).toMatchObject({ current_USED_gte: 2500, current_USED_lte: 3499, avg90_USED_gte: 2500 });
+    expect(finderSelection({ min: 2500 }, 0, 100)).not.toHaveProperty("avg90_NEW_gte");
     expect(finderSelection({ min: 3500 }, 0, 100)).not.toHaveProperty("current_USED_lte");
     expect(finderSelection({ min: 3500 }, 0, 100)).toMatchObject({ languages: ["french"], avg180_SALES_lte: 400000 });
     const english = BANDS.find((b) => b.language === "english")!;

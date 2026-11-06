@@ -9,7 +9,7 @@ La liste contient 10 736 livres au 3/11 : environ 10 250 en français et 450 en 
 | | Livres en français | Livres en anglais |
 | --- | --- | --- |
 | Prix d'occasion actuel | 10 € et plus | 25 € et plus |
-| Prix neuf moyen sur 90 jours | au moins le bas de la tranche | au moins 25 € |
+| Prix d'occasion moyen sur 90 jours | au moins le bas de la tranche | au moins 25 € |
 | Classement des ventes Amazon (moyenne 6 mois) | meilleur que 400 000 | meilleur que 150 000 |
 | Ventes sur les 6 derniers mois | au moins 3 | au moins 3 |
 
@@ -20,6 +20,7 @@ Règles communes :
 - Seulement la catégorie Livres d'Amazon.fr, et pas les livres vendus directement par Amazon.
 - Aucun livre érotique. Les catégories érotiques sont exclues, et les titres repérés par mots-clés sont retirés.
 - Un prix d'occasion de plus de 5 fois le prix neuf est jugé absurde et effacé.
+- Depuis le 6/11, un livre sans prix neuf (épuisé) peut entrer dans la liste : on regarde le prix d'occasion moyen sur 90 jours, plus le prix neuf.
 - Les tranches de prix en français sont : 35 € et plus, 25–35 €, 15–25 € et 10–15 €.
 - Un livre que j'ajoute avec « ⭐ Ajouter à ma liste » compte comme une pépite, quelle que soit la règle.
 
