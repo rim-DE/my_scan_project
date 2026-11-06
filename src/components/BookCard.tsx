@@ -33,10 +33,13 @@ export function BookCard({ detection, photo, photos = [], t, country, lists, pat
   const [panel, setPanel] = useState<null | "stock" | "list" | "note" | "price">(null);
   const [sheet, setSheet] = useState<null | "locate" | "history" | "more">(null);
   const [note, setNote] = useState(detection.note ?? "");
+  const [expanded, setExpanded] = useState(false);
   const [pending, start] = useTransition();
   const b = detection.book;
   const loc = locale === "en" ? "en-GB" : "fr-FR";
   const fp = (c: number | null | undefined, cur = "EUR") => formatPrice(c, cur, loc);
+  /** Montant arrondi à l'euro, comme BiblioScan (le montant exact est dans « Plus » et au survol). */
+  const fe = (c: number | null | undefined) => (c === null || c === undefined ? "—" : formatPrice(Math.round(c / 100) * 100, "EUR", loc));
   const ring = selected ? "ring-2 ring-fuchsia-500" : "";
   const canLocate = !!photo && !!(detection.polygon || detection.bbox);
   const iconBtn = "grid h-10 w-10 place-items-center rounded-full text-brand hover:bg-mint";
@@ -108,9 +111,9 @@ export function BookCard({ detection, photo, photos = [], t, country, lists, pat
 
   const momoxUrl = PLATFORM_BY_ID.momox?.searchUrl({ isbn13: b.isbn13 ?? "", title: b.title });
   const amazonText = amazonMin
-    ? fmt(t.book.currentlySoldShort, { price: fp(amazonMin.priceCents, amazonMin.currency), n: m.currentOfferCount || amazon.length })
+    ? fmt(t.book.currentlySoldShort, { price: fe(amazonMin.priceCents), n: m.currentOfferCount || amazon.length })
     : m.currentPriceCents !== null
-      ? fmt(t.book.currentlySoldShort, { price: fp(m.currentPriceCents), n: m.currentOfferCount })
+      ? fmt(t.book.currentlySoldShort, { price: fe(m.currentPriceCents), n: m.currentOfferCount })
       : t.book.seeOnAmazon;
   const footer = [
     m.ratio !== null && (
@@ -120,7 +123,7 @@ export function BookCard({ detection, photo, photos = [], t, country, lists, pat
     ),
     b.listPriceCents !== null && (
       <span key="list">
-        {t.book.publisherPrice} <strong>{fp(b.listPriceCents)}</strong>
+        {t.book.publisherPrice} <strong>{fe(b.listPriceCents)}</strong>
       </span>
     ),
     b.rating !== null && (
@@ -136,69 +139,69 @@ export function BookCard({ detection, photo, photos = [], t, country, lists, pat
     ),
   ].filter(Boolean);
 
-  // Mise en page inspirée de BiblioScan : prix médian en grand, ventes, Amazon, rachat, puis les indicateurs.
+  // Mise en page de BiblioScan : couverture à gauche ; à droite le prix médian en grand, les ventes, Amazon, le rachat
+  // et les boutons ronds ; puis les profits et les dernières ventes. Montants arrondis à l'euro, détail dans « Plus ».
+  const roundBtn = "grid h-12 w-12 place-items-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-800 hover:bg-mint";
+  const badges = [
+    m.biblioRank !== null && (
+      <span
+        key="rank"
+        title={t.book.biblioRankHelp}
+        className={`rounded-full px-2.5 py-0.5 text-sm font-bold text-white ${m.biblioRank >= 60 ? "bg-green-600" : m.biblioRank >= 30 ? "bg-amber-500" : "bg-slate-400"}`}
+      >
+        {t.scan.sortBiblioRank} {m.biblioRank}
+      </span>
+    ),
+    m.banger && (
+      <span key="banger" title={t.book.bangerHelp} className="rounded-full bg-yellow-400 px-2.5 py-0.5 text-sm font-bold text-yellow-950">
+        🏅 {t.book.banger}
+      </span>
+    ),
+    b.inPepites && (
+      <span key="pepite" title={t.book.inPepitesHelp} className="rounded-full bg-violet-100 px-2.5 py-0.5 text-sm font-semibold text-violet-800">
+        ⭐ {t.book.inPepites}
+      </span>
+    ),
+    b.pepiteEditions > 1 && (
+      <span key="editions" title={t.book.severalEditionsHelp} className="rounded-full bg-amber-100 px-2.5 py-0.5 text-sm font-semibold text-amber-900">
+        ⚠️ {t.book.severalEditions.replace("{n}", String(b.pepiteEditions))}
+      </span>
+    ),
+    detection.inStock && (
+      <span key="stock" className="rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-semibold text-sky-800">
+        📦 {t.book.inStock}
+      </span>
+    ),
+  ].filter(Boolean);
+
   return (
     <article id={detection.id} className={`card space-y-4 ${ring}`}>
       {b.hasDemo && <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">⚠️ {t.book.demoWarning}</p>}
-
-      <div className="flex items-start gap-2">
-        <div className="min-w-0 flex-1 space-y-2">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              {m.biblioRank !== null && (
-                <span
-                  title={t.book.biblioRankHelp}
-                  className={`rounded-full px-2.5 py-0.5 text-sm font-bold text-white ${
-                    m.biblioRank >= 60 ? "bg-green-600" : m.biblioRank >= 30 ? "bg-amber-500" : "bg-slate-400"
-                  }`}
-                >
-                  {t.scan.sortBiblioRank} {m.biblioRank}
-                </span>
-              )}
-              {m.banger && (
-                <span title={t.book.bangerHelp} className="rounded-full bg-yellow-400 px-2.5 py-0.5 text-sm font-bold text-yellow-950">
-                  🏅 {t.book.banger}
-                </span>
-              )}
-              {b.inPepites && (
-                <span title={t.book.inPepitesHelp} className="rounded-full bg-violet-100 px-2.5 py-0.5 text-sm font-semibold text-violet-800">
-                  ⭐ {t.book.inPepites}
-                </span>
-              )}
-              {b.pepiteEditions > 1 && (
-                <span title={t.book.severalEditionsHelp} className="rounded-full bg-amber-100 px-2.5 py-0.5 text-sm font-semibold text-amber-900">
-                  ⚠️ {t.book.severalEditions.replace("{n}", String(b.pepiteEditions))}
-                </span>
-              )}
-              {detection.inStock && <span className="rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-semibold text-sky-800">📦 {t.book.inStock}</span>}
-            </div>
-            <h3 className="text-base font-semibold leading-tight">{b.title}</h3>
-            <p className="text-sm text-slate-600">
-              {b.authors.join(", ")}
-              {b.publisher && ` · ${b.publisher}`}
-              {b.publishedDate && ` · ${b.publishedDate}`}
-            </p>
-          </div>
-        </div>
-        {icons}
-      </div>
+      {badges.length > 0 && <div className="flex flex-wrap items-center gap-2">{badges}</div>}
 
       <div className="flex gap-4">
-        <div className="relative shrink-0">
-          <BookCover key={b.coverUrl ?? b.isbn13} src={b.coverUrl} isbn13={b.isbn13} alt={b.title} className="h-48 w-32 rounded-lg shadow" />
-          {/* Médaille sur la couverture, comme BiblioScan. */}
-          {m.banger && (
-            <span className="absolute -top-2 -left-2 text-4xl drop-shadow" title={t.book.bangerHelp} aria-label={t.book.banger}>
-              🏅
-            </span>
-          )}
+        <div className="w-[40%] max-w-44 shrink-0 space-y-2">
+          <div className="relative">
+            <BookCover key={b.coverUrl ?? b.isbn13} src={b.coverUrl} isbn13={b.isbn13} alt={b.title} className="aspect-[2/3] w-full rounded-lg object-cover shadow" />
+            {/* Médaille sur la couverture, comme BiblioScan. */}
+            {m.banger && (
+              <span className="absolute -top-2 -left-2 text-4xl drop-shadow" title={t.book.bangerHelp} aria-label={t.book.banger}>
+                🏅
+              </span>
+            )}
+          </div>
+          {b.isbn13 && <p className="w-fit rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-600">{b.isbn13}</p>}
+          {b.isbn10 && <p className="w-fit rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-600">▮▯▮ {b.isbn10}</p>}
         </div>
-        <div className="min-w-0 flex-1 space-y-2">
-          {/* Sans vente connue, la médiane vient des offres en cours : on le dit. */}
-          <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
-            {m.sales.length > 0 ? t.book.salesMedian : t.book.offersMedian}
-          </p>
-          <p className="text-4xl font-bold leading-none">{fp(s.medianCents)}</p>
+
+        <div className="min-w-0 flex-1 space-y-3">
+          <div className="space-y-1">
+            {/* Sans vente connue, la médiane vient des offres en cours : on le dit. */}
+            <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
+              {m.sales.length > 0 ? t.book.salesMedian : t.book.offersMedian}
+            </p>
+            <p className="text-4xl font-bold leading-none" title={fp(s.medianCents)}>{fe(s.medianCents)}</p>
+          </div>
           <p className="flex flex-wrap items-center gap-2 text-sm">
             {m.sales12m !== null ? (
               <>
@@ -212,12 +215,12 @@ export function BookCard({ detection, photo, photos = [], t, country, lists, pat
             )}
           </p>
           {m.sales12m === 0 && <p className="text-xs font-semibold text-amber-700">⚠️ {t.book.noSalesWarning}</p>}
-          {/* Toujours affiché : sans prix connu, c'est un raccourci vers la fiche Amazon de ce livre (par ISBN). */}
+          {/* Toujours affiché : sans prix connu, c'est un raccourci vers la recherche Amazon de ce livre (par ISBN). */}
           <a
             href={amazonMin?.url ?? amazonSearchUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 rounded-xl bg-amber-900/10 px-3 py-2 text-sm font-medium text-amber-900 hover:bg-amber-900/15"
+            className="flex items-center gap-2 rounded-2xl bg-[#4a3518] px-3 py-2 text-sm font-medium text-[#f7b955] hover:bg-[#5a411d]"
           >
             <SiteLogo id="amazon" color="#ff9900" size={22} />
             <span>{amazonText}</span>
@@ -227,7 +230,7 @@ export function BookCard({ detection, photo, photos = [], t, country, lists, pat
             href={buyback?.url ?? (buyback ? PLATFORM_BY_ID[buyback.platform]?.searchUrl({ isbn13: b.isbn13 ?? "", title: b.title }) : momoxUrl)}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 rounded-xl border border-green-300 bg-green-50 px-3 py-2 text-sm font-medium text-green-800 hover:bg-green-100"
+            className="flex items-center gap-2 rounded-2xl border border-green-300 bg-green-50 px-3 py-2 text-sm font-medium text-green-800 hover:bg-green-100"
           >
             <SiteLogo id={buyback?.platform ?? "momox"} color={PLATFORM_BY_ID[buyback?.platform ?? "momox"]?.color ?? "#56b146"} size={22} />
             <span>
@@ -240,34 +243,43 @@ export function BookCard({ detection, photo, photos = [], t, country, lists, pat
                 : t.book.seeMomox}
             </span>
           </a>
+          <div className="flex flex-wrap gap-2">
+            <button className={roundBtn} onClick={() => setSheet("history")} title={t.book.salesHistory} aria-label={t.book.salesHistory}>
+              <BooksIcon />
+            </button>
+            {canLocate && (
+              <button className={roundBtn} onClick={() => setSheet("locate")} title={t.book.locate} aria-label={t.book.locate}>
+                <LocateIcon />
+              </button>
+            )}
+            <button className={roundBtn} onClick={() => setSheet("more")} title={t.book.moreTitle} aria-label={t.book.moreTitle}>
+              <MoreIcon />
+            </button>
+            <button className={`${roundBtn} w-auto px-4 font-semibold`} onClick={() => setExpanded(!expanded)} aria-expanded={expanded}>
+              {expanded ? t.book.less : t.book.plus}
+            </button>
+          </div>
         </div>
       </div>
 
-      {(b.isbn13 || b.isbn10) && (
-        <p className="flex flex-wrap gap-2 text-sm text-slate-600">
-          {b.isbn13 && <span className="rounded-full bg-slate-100 px-3 py-1">{b.isbn13}</span>}
-          {b.isbn10 && <span className="rounded-full bg-slate-100 px-3 py-1">▮▯▮ {b.isbn10}</span>}
-        </p>
-      )}
-
-      <div className="grid grid-cols-3 divide-x divide-slate-200 rounded-xl border border-slate-200 text-sm">
+      <div className="grid grid-cols-3 divide-x divide-slate-200 rounded-2xl border border-slate-200 text-sm">
         <div className="p-3" title={t.book.weightedProfitHelp}>
           <p className="text-slate-500">{t.book.weightedProfitShort}</p>
-          <p className="mt-1 text-lg font-bold">{fp(m.weightedProfit30dCents)}</p>
+          <p className="mt-1 text-lg font-bold">{fe(m.weightedProfit30dCents)}</p>
         </div>
         <div className="p-3" title={t.book.netProfitHelp}>
           <p className="text-slate-500">{t.book.netProfit}</p>
-          <p className={`mt-1 text-lg font-bold ${(s.netAfterFeesCents ?? 0) > 0 ? "text-green-700" : ""}`}>{fp(s.netAfterFeesCents)}</p>
+          <p className={`mt-1 text-lg font-bold ${(s.netAfterFeesCents ?? 0) > 0 ? "text-green-700" : ""}`}>{fe(s.netAfterFeesCents)}</p>
         </div>
         <div className="p-3">
           <p className="text-slate-500">{t.book.maxBuyShort}</p>
-          <p className="mt-1 text-lg font-bold">{fp(s.maxBuyCents)}</p>
+          <p className="mt-1 text-lg font-bold">{fe(s.maxBuyCents)}</p>
         </div>
       </div>
 
       {m.lastSales.length > 0 ? (
         <div className="overflow-x-auto">
-          <table className="w-full border-separate border-spacing-0 overflow-hidden rounded-xl border border-slate-200 text-sm">
+          <table className="w-full border-separate border-spacing-0 overflow-hidden rounded-2xl border border-slate-200 text-sm">
             <tbody>
               <tr>
                 <th className="border-b border-r border-slate-200 bg-slate-50 px-3 py-2 text-left font-semibold">{t.book.soldAgo}</th>
@@ -280,8 +292,8 @@ export function BookCard({ detection, photo, photos = [], t, country, lists, pat
               <tr>
                 <th className="border-r border-slate-200 bg-slate-50 px-3 py-2 text-left font-semibold">{t.book.atPrice}</th>
                 {m.lastSales.map((x, i) => (
-                  <td key={i} className="border-r border-slate-200 px-2 py-2 text-center font-bold last:border-r-0">
-                    {fp(x.priceCents)}
+                  <td key={i} className="border-r border-slate-200 px-2 py-2 text-center font-bold last:border-r-0" title={fp(x.priceCents)}>
+                    {fe(x.priceCents)}
                   </td>
                 ))}
               </tr>
@@ -303,7 +315,7 @@ export function BookCard({ detection, photo, photos = [], t, country, lists, pat
         </p>
       )}
 
-      {b.prices.length === 0 ? (
+      {b.prices.length === 0 && (
         <p className="text-sm text-slate-500">
           {b.priceStatus === "waiting"
             ? t.book.noPriceWaiting
@@ -313,67 +325,92 @@ export function BookCard({ detection, photo, photos = [], t, country, lists, pat
                 ? t.book.noPriceOutOfList
                 : t.book.noPrice}
         </p>
-      ) : (
-        <details className="overflow-x-auto">
-          <summary className="cursor-pointer text-sm text-brand">{fmt(t.book.allOffers, { n: b.prices.length })}</summary>
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs text-slate-500">
-              <tr>
-                <th className="py-1">{t.book.platform}</th>
-                <th>{t.book.type}</th>
-                <th>{t.book.price}</th>
-                <th>{t.book.date}</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {b.prices.map((p) => (
-                <tr key={p.id} className="border-t border-slate-100">
-                  <td className="py-1">{platformName(p.platform)}</td>
-                  <td>
-                    {t.book.offerTypes[p.offerType]}{" "}
-                    <span className="text-[10px] text-slate-400">({t.book.sources[p.source as "api" | "manual" | "demo"] ?? p.source})</span>
-                  </td>
-                  <td className="font-medium">{fp(p.priceCents, p.currency)}</td>
-                  <td className="text-xs text-slate-500">{new Date(p.observedAt).toLocaleDateString(loc)}</td>
-                  <td className="space-x-2 text-right">
-                    {p.url && (
-                      <a href={p.url} target="_blank" rel="noopener noreferrer" className="text-brand underline">
-                        {t.book.link}
-                      </a>
-                    )}
-                    {p.source === "manual" && (
-                      <button className="text-xs text-red-600" onClick={() => start(() => deletePriceAction(p.id, path))}>
-                        ✕
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </details>
       )}
 
-      {detection.note && panel !== "note" && <p className="rounded-xl bg-mint px-3 py-2 text-sm">📝 {detection.note}</p>}
-
-      <div className="flex flex-wrap gap-2">
-        <button className="btn-outline" onClick={() => setPanel(panel === "stock" ? null : "stock")}>📦 {t.book.addStock}</button>
-        <button className="btn-outline" onClick={() => setPanel(panel === "list" ? null : "list")}>🛒 {t.book.addToList}</button>
-        {canNote && (
-          <button className="btn-outline" onClick={() => setPanel(panel === "note" ? null : "note")}>📝 {t.book.addNote}</button>
-        )}
-        <button className="btn-outline" onClick={() => setPanel(panel === "price" ? null : "price")}>➕ {t.book.addPrice}</button>
-        <button className="btn-outline" disabled={pending} onClick={() => start(() => refreshPricesAction(b.id, country, path))}>
-          🔄 {pending ? t.common.loading : t.book.refreshPrices}
+      {detection.note && panel !== "note" ? (
+        <button className="block w-full rounded-xl bg-mint px-3 py-2 text-left text-sm" onClick={() => canNote && setPanel("note")}>
+          📝 {detection.note}
         </button>
-        {/* Les livres du fichier y sont déjà ; les autres s'ajoutent (ou se retirent) d'un clic. */}
-        {(!b.inPepites || b.manualPepite) && (
-          <button className="btn-outline" disabled={pending} onClick={() => start(() => setManualPepiteAction(b.id, !b.manualPepite, country, path))}>
-            {b.manualPepite ? `✖ ${t.book.removeFromPepites}` : `⭐ ${t.book.addToPepites}`}
+      ) : (
+        canNote && panel !== "note" && (
+          <button className="text-sm text-slate-600 hover:text-slate-800" onClick={() => setPanel("note")}>
+            📝 {t.book.addNote}
           </button>
-        )}
-      </div>
+        )
+      )}
+
+      {/* « Plus » : le titre complet, les montants exacts, toutes les offres et les actions moins fréquentes. */}
+      {expanded && (
+        <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+          <div>
+            <h3 className="text-base font-semibold leading-tight">{b.title}</h3>
+            <p className="text-sm text-slate-600">
+              {b.authors.join(", ")}
+              {b.publisher && ` · ${b.publisher}`}
+              {b.publishedDate && ` · ${b.publishedDate}`}
+            </p>
+          </div>
+          <p className="text-sm text-slate-600">
+            {t.book.salesMedian} <strong>{fp(s.medianCents)}</strong> · {t.book.netProfit} <strong>{fp(s.netAfterFeesCents)}</strong> · {t.book.maxBuyShort}{" "}
+            <strong>{fp(s.maxBuyCents)}</strong> · {t.book.weightedProfitShort} <strong>{fp(m.weightedProfit30dCents)}</strong>
+          </p>
+          {b.prices.length > 0 && (
+            <details className="overflow-x-auto">
+              <summary className="cursor-pointer text-sm text-brand">{fmt(t.book.allOffers, { n: b.prices.length })}</summary>
+              <table className="w-full text-sm">
+                <thead className="text-left text-xs text-slate-500">
+                  <tr>
+                    <th className="py-1">{t.book.platform}</th>
+                    <th>{t.book.type}</th>
+                    <th>{t.book.price}</th>
+                    <th>{t.book.date}</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {b.prices.map((p) => (
+                    <tr key={p.id} className="border-t border-slate-100">
+                      <td className="py-1">{platformName(p.platform)}</td>
+                      <td>
+                        {t.book.offerTypes[p.offerType]}{" "}
+                        <span className="text-[10px] text-slate-400">({t.book.sources[p.source as "api" | "manual" | "demo"] ?? p.source})</span>
+                      </td>
+                      <td className="font-medium">{fp(p.priceCents, p.currency)}</td>
+                      <td className="text-xs text-slate-500">{new Date(p.observedAt).toLocaleDateString(loc)}</td>
+                      <td className="space-x-2 text-right">
+                        {p.url && (
+                          <a href={p.url} target="_blank" rel="noopener noreferrer" className="text-brand underline">
+                            {t.book.link}
+                          </a>
+                        )}
+                        {p.source === "manual" && (
+                          <button className="text-xs text-red-600" onClick={() => start(() => deletePriceAction(p.id, path))}>
+                            ✕
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </details>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <button className="btn-outline" onClick={() => setPanel(panel === "stock" ? null : "stock")}>📦 {t.book.addStock}</button>
+            <button className="btn-outline" onClick={() => setPanel(panel === "list" ? null : "list")}>🛒 {t.book.addToList}</button>
+            <button className="btn-outline" onClick={() => setPanel(panel === "price" ? null : "price")}>➕ {t.book.addPrice}</button>
+            <button className="btn-outline" disabled={pending} onClick={() => start(() => refreshPricesAction(b.id, country, path))}>
+              🔄 {pending ? t.common.loading : t.book.refreshPrices}
+            </button>
+            {/* Les livres du fichier y sont déjà ; les autres s'ajoutent (ou se retirent) d'un clic. */}
+            {(!b.inPepites || b.manualPepite) && (
+              <button className="btn-outline" disabled={pending} onClick={() => start(() => setManualPepiteAction(b.id, !b.manualPepite, country, path))}>
+                {b.manualPepite ? `✖ ${t.book.removeFromPepites}` : `⭐ ${t.book.addToPepites}`}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {panel === "stock" && (
         <form action={(fd) => start(async () => { await addToStockAction(fd); setPanel(null); })} className="flex flex-wrap gap-2">

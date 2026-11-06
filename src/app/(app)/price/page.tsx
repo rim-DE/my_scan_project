@@ -65,7 +65,7 @@ export default async function PricePage({ searchParams }: { searchParams: Promis
             <p className="mt-1 text-sm text-slate-500">{fmt(t.price.basedOn, { n: result.stats.count })}</p>
             <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
               {CONDITIONS.map((c) => (
-                <div key={c} className={`rounded-2xl p-3 text-sm ${c === condition ? "bg-brand text-white" : "bg-mint"}`}>
+                <div key={c} className={`rounded-2xl p-3 text-sm ${c === condition ? "bg-brand text-ink" : "bg-mint"}`}>
                   <p className="text-xs opacity-80">{t.conditions[c]}</p>
                   <p className="font-semibold">{formatPrice(estimateForCondition(result.stats, c), "EUR", loc)}</p>
                 </div>

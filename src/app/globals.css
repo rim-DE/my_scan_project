@@ -1,20 +1,68 @@
 @import "tailwindcss";
 
+/* Thème sombre vert, comme BiblioScan (choix de rim, 6/11/2026). Les couleurs claires de Tailwind (50-300) deviennent
+   des teintes sombres et les foncées (600-900) des teintes claires : les classes existantes restent lisibles sur fond sombre. */
 @theme {
-  --color-brand: #0f3d3e;
-  --color-brand-light: #1d5c5d;
-  --color-cream: #faf7ef;
-  --color-mint: #eef4f1;
+  --color-brand: #8fd3d3;
+  --color-brand-light: #b2e4e2;
+  --color-ink: #0c2421;
+  --color-page: #0f2a27;
+  --color-surface: #15342f;
+  --color-cream: #18392f;
+  --color-mint: #1f433d;
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  --color-slate-50: #1a3b35;
+  --color-slate-100: #21453f;
+  --color-slate-200: #2c524b;
+  --color-slate-300: #3d6259;
+  --color-slate-400: #85a19a;
+  --color-slate-500: #a7bdb7;
+  --color-slate-600: #c8d7d3;
+  --color-slate-700: #dbe6e3;
+  --color-slate-800: #e6eeec;
+  --color-slate-900: #f0f5f4;
+
+  --color-green-50: #16402d;
+  --color-green-100: #1d4d37;
+  --color-green-300: #3b8a5e;
+  --color-green-600: #2f9e5b;
+  --color-green-700: #74d69e;
+  --color-green-800: #8fe0b1;
+
+  --color-amber-50: #3b3016;
+  --color-amber-100: #4a3818;
+  --color-amber-700: #f3c46b;
+  --color-amber-800: #f6cd7d;
+  --color-amber-900: #f7b955;
+
+  --color-red-50: #3e2121;
+  --color-red-100: #4e2525;
+  --color-red-200: #6e3030;
+  --color-red-600: #f28b82;
+  --color-red-700: #f5a39b;
+
+  --color-sky-100: #183c4c;
+  --color-sky-700: #8fd0f0;
+  --color-sky-800: #a6dcf5;
+
+  --color-violet-100: #352851;
+  --color-violet-800: #d3c1f7;
 }
 
 body {
-  background: #f3f7f5;
-  color: #1a2b2b;
+  background: var(--color-page);
+  color: var(--color-slate-800);
+  color-scheme: dark;
+}
+
+/* « bg-white » sert aux fonds de cartes et de champs : surface sombre (le texte blanc reste blanc). */
+.bg-white {
+  background-color: var(--color-surface);
 }
 
 @utility card {
-  @apply rounded-3xl border border-slate-200 bg-white p-5 shadow-sm;
+  @apply rounded-3xl border border-slate-200 bg-surface p-5 shadow-sm;
 }
 
 @utility btn {
@@ -22,15 +70,15 @@ body {
 }
 
 @utility btn-primary {
-  @apply btn bg-brand text-white hover:bg-brand-light;
+  @apply btn bg-brand text-ink hover:bg-brand-light;
 }
 
 @utility btn-outline {
-  @apply btn border border-slate-300 bg-white hover:bg-mint;
+  @apply btn border border-slate-300 bg-surface hover:bg-mint;
 }
 
 @utility input {
-  @apply w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand;
+  @apply w-full rounded-xl border border-slate-300 bg-surface px-3 py-2 text-sm outline-none focus:border-brand;
 }
 
 @utility chip {
@@ -56,7 +104,7 @@ body {
   height: 6px;
   transform: translateY(-50%);
   border-radius: 9999px;
-  background: #1e293b;
+  background: #2c524b;
 }
 .dual-range input[type="range"]::-webkit-slider-thumb {
   appearance: none;
@@ -64,8 +112,8 @@ body {
   width: 22px;
   height: 22px;
   border-radius: 9999px;
-  background: white;
-  border: 2px solid #64748b;
+  background: #e6eeec;
+  border: 2px solid #85a19a;
   cursor: pointer;
 }
 .dual-range input[type="range"]::-moz-range-thumb {
@@ -73,7 +121,7 @@ body {
   width: 22px;
   height: 22px;
   border-radius: 9999px;
-  background: white;
-  border: 2px solid #64748b;
+  background: #e6eeec;
+  border: 2px solid #85a19a;
   cursor: pointer;
 }
