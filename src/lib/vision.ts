@@ -170,15 +170,16 @@ export function mergeTiles(perTile: CleanDetection[][]): CleanDetection[] {
   const area = (b: CleanDetection) => (b.bbox ? b.bbox.w * b.bbox.h : 0);
   const kept: { b: CleanDetection; tile: number }[] = [];
   for (const x of [...all].sort((p, q) => area(q.b) - area(p.b))) {
-    const dup = kept.some(
-      (k) =>
-        k.tile !== x.tile &&
-        k.b.bbox &&
-        x.b.bbox &&
-        overlapOfSmaller(k.b.bbox, x.b.bbox) > 0.6 &&
-        // Le rectangle d'un livre penché peut englober son voisin : il faut aussi un mot du titre en commun.
-        (iou(k.b.bbox, x.b.bbox) > 0.5 || shareWord(k.b, x.b)),
-    );
+    const dup = kept.some((k) => {
+      if (k.tile === x.tile || !k.b.bbox || !x.b.bbox) return false;
+      const overlap = overlapOfSmaller(k.b.bbox, x.b.bbox);
+      // Le rectangle d'un livre penché peut englober son voisin : il faut aussi un mot du titre en commun.
+      if (overlap > 0.6 && (iou(k.b.bbox, x.b.bbox) > 0.5 || shareWord(k.b, x.b))) return true;
+      // Même titre lu par deux morceaux, mais rectangles décalés : on exige qu'ils se touchent
+      // (deux exemplaires rangés à deux endroits restent deux livres, et un livre « solo » n'est jamais retiré).
+      const same = sameTitleWords(k.b, x.b);
+      return (same === "equal" && overlap > 0) || (same === "subset" && overlap > 0.3);
+    });
     if (!dup) kept.push(x);
   }
   return readingOrder(kept.map((k) => k.b));
@@ -261,6 +262,18 @@ export function tightenBoxes(books: CleanDetection[], size: { width: number; hei
 
 const words = (b: DetectedBook) =>
   new Set(`${b.title} ${b.author ?? ""}`.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").split(/[^a-z0-9]+/).filter((w) => w.length >= 3));
+
+const titleWords = (b: DetectedBook) =>
+  new Set(b.title.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").split(/[^a-z0-9]+/).filter((w) => w.length >= 2));
+
+/** « equal » : mêmes mots dans le titre ; « subset » : un titre est contenu dans l'autre (« Bonsaï » / « Bonsaï d'intérieur »). */
+export function sameTitleWords(a: DetectedBook, b: DetectedBook): "equal" | "subset" | null {
+  const [wa, wb] = [titleWords(a), titleWords(b)];
+  if (!wa.size || !wb.size) return null;
+  const [small, big] = wa.size <= wb.size ? [wa, wb] : [wb, wa];
+  if (![...small].every((w) => big.has(w))) return null;
+  return small.size === big.size ? "equal" : "subset";
+}
 
 function shareWord(a: DetectedBook, b: DetectedBook): boolean {
   const wa = words(a);
