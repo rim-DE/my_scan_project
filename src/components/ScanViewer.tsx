@@ -210,40 +210,49 @@ export function ScanViewer({ photos, detections, t, country, lists, path, locale
       )}
 
       {detections.length > 0 && (
-        <div className="card space-y-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <button className="btn-primary" onClick={exportCsv}>
-              {t.scan.export}
+        <>
+          {/* Comme BiblioScan : les tris en une ligne qui défile, et « Filtres » juste dessous, toujours visibles en haut. */}
+          <div className="sticky top-0 z-20 -mx-4 space-y-2 border-b border-slate-200 bg-page/95 px-4 py-3 backdrop-blur">
+            <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
+              {sorts.map(([k, label]) => (
+                <button
+                  key={k}
+                  onClick={() => setSort(k)}
+                  className={`btn shrink-0 whitespace-nowrap rounded-full px-5 py-2.5 text-base ${
+                    sort === k ? "bg-brand font-semibold text-ink" : "border border-slate-300 text-slate-700"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <button
+              className="flex w-full items-center gap-3 rounded-full border border-slate-300 px-5 py-3 text-left text-base font-semibold"
+              onClick={() => setShowFilters(true)}
+            >
+              <span aria-hidden>⚙️</span> {t.scan.filters.button}
+              {activeFilters > 0 && <span className="rounded-full bg-brand px-2 text-xs text-ink">{activeFilters}</span>}
             </button>
-            <button className="btn rounded-full border border-slate-300 bg-white" onClick={() => setShowFilters(true)}>
-              ⚙️ {t.scan.filters.button}
-              {activeFilters > 0 && <span className="ml-1 rounded-full bg-brand px-2 text-xs text-white">{activeFilters}</span>}
-            </button>
-            {bangers.length > 0 && (
-              <button className="btn rounded-full bg-yellow-400 font-semibold text-yellow-950" onClick={() => setShowBangers(true)}>
-                {fmt(t.scan.bangersButton, { n: bangers.length })}
-              </button>
-            )}
-            <input className="input min-w-0 flex-1" placeholder={t.scan.search} value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
-          <p className="text-center font-semibold">{t.scan.sortBy}</p>
-          <div className="flex flex-wrap justify-center gap-2">
-            {sorts.map(([k, label]) => (
-              <button
-                key={k}
-                onClick={() => setSort(k)}
-                className={`btn rounded-full text-sm ${sort === k ? "bg-brand text-white" : "border border-slate-300 bg-white"}`}
-              >
-                {label}
+          <div className="card space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <button className="btn-primary" onClick={exportCsv}>
+                {t.scan.export}
               </button>
-            ))}
+              {bangers.length > 0 && (
+                <button className="btn rounded-full bg-yellow-400 font-semibold text-yellow-950" onClick={() => setShowBangers(true)}>
+                  {fmt(t.scan.bangersButton, { n: bangers.length })}
+                </button>
+              )}
+              <input className="input min-w-0 flex-1" placeholder={t.scan.search} value={q} onChange={(e) => setQ(e.target.value)} />
+            </div>
+            <p className="text-sm text-slate-600">{fmt(t.scan.booksFound, { n: shown.length })}</p>
           </div>
-          <p className="text-sm text-slate-600">{fmt(t.scan.booksFound, { n: shown.length })}</p>
-        </div>
+        </>
       )}
 
       {/* Liste déroulante de tous les livres : la tranche pour vérifier, les statistiques à côté. */}
-      <div className="max-h-[85vh] space-y-4 overflow-y-auto pr-1">
+      <div className="space-y-4">
         {shown.map((d) => (
           <BookCard
             key={d.id}

@@ -8,8 +8,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Scan de livres et estimation des prix de revente",
     start_url: "/",
     display: "standalone",
-    background_color: "#ffffff",
-    theme_color: "#0f3d3e",
+    background_color: "#0f2a27",
+    theme_color: "#0f2a27",
     icons: [{ src: "/icon.png", sizes: "512x512", type: "image/png", purpose: "any" }],
   };
 }

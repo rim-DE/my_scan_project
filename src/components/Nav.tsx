@@ -15,7 +15,7 @@ export function Nav({ t, locale, credits, initial, badgeCount }: Props) {
     <header className="mx-auto max-w-5xl px-4 pt-4">
       <nav className="flex flex-wrap items-center gap-3 rounded-full border border-slate-200 bg-cream px-3 py-2 shadow-sm">
         <Link href="/" className="flex items-center gap-2 font-semibold text-brand">
-          <span className="grid h-8 w-8 place-items-center rounded-full bg-brand text-white">📚</span>
+          <span className="grid h-8 w-8 place-items-center rounded-full bg-brand text-ink">📚</span>
           <span className="hidden sm:inline">{t.nav.dashboard}</span>
         </Link>
         <div className="ml-auto flex items-center gap-2">
@@ -26,7 +26,7 @@ export function Nav({ t, locale, credits, initial, badgeCount }: Props) {
           <span className="rounded-full bg-mint px-3 py-1 text-sm" title={t.nav.credits}>
             {credits} 🪙
           </span>
-          <Link href="/profile" className="grid h-8 w-8 place-items-center rounded-full bg-brand-light text-sm font-semibold text-white" title={t.nav.profile}>
+          <Link href="/profile" className="grid h-8 w-8 place-items-center rounded-full bg-brand-light text-sm font-semibold text-ink" title={t.nav.profile}>
             {initial}
           </Link>
         </div>

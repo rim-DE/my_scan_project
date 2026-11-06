@@ -22,7 +22,14 @@ export function coverCandidates(src: string | null, isbn13: string | null): stri
 export function BookCover({ src, isbn13, alt, className }: { src: string | null; isbn13: string | null; alt: string; className: string }) {
   const candidates = coverCandidates(src, isbn13);
   const [i, setI] = useState(0);
-  if (i >= candidates.length) return <div className={`${className} grid place-items-center bg-mint text-4xl`}>📕</div>;
+  // Sans image, le titre s'affiche sur le livre stylisé (la fiche ne le répète plus ailleurs).
+  if (i >= candidates.length)
+    return (
+      <div className={`${className} flex flex-col items-center justify-center gap-2 bg-mint p-2 text-center`}>
+        <span className="text-4xl">📕</span>
+        <span className="line-clamp-5 text-xs font-semibold leading-tight">{alt}</span>
+      </div>
+    );
   const next = () => setI(i + 1);
   return (
     // eslint-disable-next-line @next/next/no-img-element
