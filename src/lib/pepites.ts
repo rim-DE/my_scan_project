@@ -72,8 +72,9 @@ export function finderSelection(band: PriceBand, page: number, perPage: number) 
     languages: [band.language ?? "french"],
     current_USED_gte: band.min,
     ...(band.max ? { current_USED_lte: band.max } : {}),
-    // Moyenne sur 90 jours, pas le prix du jour : écarte les livres dont le prix neuf vient juste de flamber.
-    avg90_NEW_gte: band.min,
+    // Moyenne d'occasion sur 90 jours, pas le prix du jour : écarte les livres dont le prix vient juste de flamber.
+    // (Avant le 6/11/2026 c'était le prix neuf moyen : les livres épuisés, sans prix neuf, étaient tous écartés.)
+    avg90_USED_gte: band.min,
     buyBoxIsAmazon: false,
     ...(band.minRank ? { avg180_SALES_gte: band.minRank } : {}),
     avg180_SALES_lte: band.maxRank ?? 400000,
