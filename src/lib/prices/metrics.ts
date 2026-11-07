@@ -108,9 +108,17 @@ const ABERRANT_FACTOR = 5;
 export function dropAberrantPrices<T extends { offerType: string; priceCents: number }>(points: T[], listPriceCents?: number | null): T[] {
   const priced = points.filter((p) => p.offerType !== "BUYBACK").map((p) => p.priceCents);
   const ref = listPriceCents && listPriceCents > 0 ? listPriceCents : median(priced);
-  if (!ref) return points;
-  return points.filter((p) => p.offerType === "BUYBACK" || p.priceCents <= ref * ABERRANT_FACTOR);
+  const kept = ref ? points.filter((p) => p.offerType === "BUYBACK" || p.priceCents <= ref * ABERRANT_FACTOR) : points;
+  // Seule offre, sans prix éditeur : la médiane est l'offre elle-même, la règle ci-dessus ne voit rien.
+  // Une offre de 1 000 € et plus qu'aucune vente (au moins un cinquième de son prix) ne confirme est un bouche-trou.
+  const topSale = Math.max(0, ...kept.filter((p) => p.offerType === "SOLD").map((p) => p.priceCents));
+  return kept.filter(
+    (p) => p.offerType === "BUYBACK" || p.offerType === "SOLD" || p.priceCents < PLACEHOLDER_CENTS || topSale * ABERRANT_FACTOR >= p.priceCents,
+  );
 }
+
+/** Prix à partir duquel une offre sans vente pour la confirmer est jugée fictive (rim, 7/11/2026 : offres à 2 038 €). */
+const PLACEHOLDER_CENTS = 100000;
 
 const DAY = 24 * 3600 * 1000;
 

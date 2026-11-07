@@ -125,6 +125,12 @@ describe("prix aberrants", () => {
     const pts = [1500, 1600, 1700, 203400].map((priceCents) => ({ offerType: "SOLD", priceCents }));
     expect(dropAberrantPrices(pts, null).map((p) => p.priceCents)).toEqual([1500, 1600, 1700]);
   });
+
+  it("retire une offre unique à 2 038 € qu'aucune vente ne confirme", () => {
+    expect(dropAberrantPrices([{ offerType: "USED", priceCents: 203800 }], null)).toEqual([]);
+    const rare = [{ offerType: "USED", priceCents: 150000 }, { offerType: "SOLD", priceCents: 90000 }];
+    expect(dropAberrantPrices(rare, null)).toHaveLength(2);
+  });
 });
 
 describe("pépites (livres « intéressants » selon BiblioScan)", () => {
