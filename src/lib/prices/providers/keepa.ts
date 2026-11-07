@@ -159,12 +159,16 @@ export const keepaProvider: PriceProvider = {
   },
 };
 
-/** Fiche retenue avant le 7/11/2026 : si c'était un coffret ou un autre tome, on refait la recherche par titre. */
+/**
+ * Fiche retenue lors d'une recherche précédente : si elle ne passe plus la règle de correspondance
+ * (coffret, autre tome, titre général…), on refait la recherche par titre. Sans titre connu (fiche d'une autre
+ * édition choisie par ISBN), on la garde.
+ */
 async function storedEdition(book: BookRef, asin: string, domain: number, country: string): Promise<ProviderResult> {
   const { result, product } = await productWithFiche("asin", asin, domain, country);
-  const t = product?.title;
-  if (t && ((isBoxSet(t) && !isBoxSet(book.title)) || otherVolume(book.title, t) || missesVolume(book.title, t))) {
-    return searchByTitle(book, country);
+  if (product?.title && !book.isbn13) {
+    const ok = pickKeepaMatch(book, [product]) && !missesVolume(book.title, product.title);
+    if (!ok) return searchByTitle(book, country);
   }
   return result;
 }
@@ -278,33 +282,74 @@ async function keepaGet(url: URL): Promise<Response> {
 
 /** Recherche Amazon par titre et auteur (10 jetons), pour les livres sans ISBN ou dont l'ISBN n'est pas vendu sur Amazon. */
 async function searchByTitle(book: BookRef, country: string): Promise<ProviderResult> {
-  const p = pickKeepaMatch(book, await keepaSearch(book.title, book.authors[0], country));
+  let p = pickKeepaMatch(book, await keepaSearch(book.title, book.authors[0], country));
+  // Rien de sûr avec le titre complet : une 2e recherche avec le titre court et l'auteur (10 jetons de plus).
+  const short = mainTitle(book.title);
+  if (!p && short !== book.title.trim()) p = pickKeepaMatch(book, await keepaSearch(short, book.authors[0], country));
   if (!p?.asin) return { observations: [] };
   return { ...productResult(p, country), asin: p.asin };
 }
 
 /**
- * Choisit la fiche Amazon qui correspond au livre : presque tous les mots du titre doivent y être,
- * et le nom de l'auteur aussi quand on le connaît. Entre plusieurs éditions, on prend la mieux classée
- * (la plus vendue), comme BiblioScan.
+ * Choisit la fiche Amazon qui correspond au livre (règle générale, rim 7/11/2026) :
+ * - tous les mots importants du titre principal du livre sont dans la fiche, et l'auteur quand on le connaît ;
+ * - quand le livre a un nom de tome, la fiche ne le remplace pas par un autre mot (« Histoire de l'art-l'art médiéval »
+ *   n'est pas « Histoire de l'art : l'art renaissant ») ;
+ * - ni coffret ni intégrale pour un seul tome, ni un autre tome de la série (sous-titres sans mot commun).
+ * Entre plusieurs fiches qui passent, celle qui nomme le tome d'abord, puis la mieux classée (la plus vendue),
+ * comme BiblioScan. Aucune ne passe : pas de prix plutôt qu'un faux prix.
  */
 export function pickKeepaMatch(book: { title: string; authors: string[] }, products: KeepaProduct[]): KeepaProduct | null {
-  const words = (s: string) => normalizeText(s).split(" ").map(romanOrdinal).filter((w) => w.length > 2);
-  const titleWords = words(book.title);
-  if (titleWords.length === 0) return null;
-  const surnames = book.authors.map((a) => words(a).at(-1)).filter((w): w is string => Boolean(w));
+  const bookMain = keyWords(mainTitle(stripParens(book.title)));
+  if (bookMain.length === 0) return null;
+  const bookAll = new Set([...keyWords(book.title), ...book.authors.flatMap(keyWords)]);
+  const surnames = book.authors.map((a) => keyWords(a).at(-1)).filter((w): w is string => Boolean(w));
   const rank = (p: KeepaProduct) => pos(p.stats?.current?.[SALES_RANK]) ?? Infinity;
   const matches = products.filter((p) => {
-    const found = new Set(words(`${p.title ?? ""} ${p.author ?? ""}`));
-    const coverage = titleWords.filter((w) => found.has(w)).length / titleWords.length;
-    const authorOk = surnames.length === 0 || surnames.some((s) => found.has(s));
+    if (!p.title) return false;
+    const found = new Set(keyWords(`${p.title} ${p.author ?? ""}`));
+    if (!bookMain.every((w) => found.has(w))) return false;
+    if (surnames.length > 0 && !surnames.some((s) => found.has(s))) return false;
+    // Le livre a un nom de tome (« l'art renaissant ») et la fiche en a un autre à la place (« l'art médiéval »).
+    // Un titre Amazon simplement plus long (« … et dans la peinture en particulier ») reste accepté.
+    if (missesVolume(book.title, p.title)) {
+      const authorWords = new Set(keyWords(p.author ?? ""));
+      const extra = keyWords(mainTitle(stripParens(p.title))).filter((w) => !bookAll.has(w) && !authorWords.has(w) && !isVolumeMark(w));
+      if (extra.length > 0) return false;
+    }
     // Un seul tome ne doit pas prendre le prix du coffret, ni celui d'un autre tome de la série.
-    if (p.title && ((isBoxSet(p.title) && !isBoxSet(book.title)) || otherVolume(book.title, p.title))) return false;
-    return authorOk && coverage >= 0.75;
+    return !(isBoxSet(p.title) && !isBoxSet(book.title)) && !otherVolume(book.title, p.title);
   });
   // La fiche qui nomme le tome passe avant celle qui n'a que le titre général, puis la mieux classée.
   const general = (p: KeepaProduct) => (p.title && missesVolume(book.title, p.title) ? 1 : 0);
   return matches.sort((a, b) => general(a) - general(b) || rank(a) - rank(b))[0] ?? null;
+}
+
+/** Petits mots et mots d'édition : ils ne distinguent pas un livre d'un autre. Liste fixe, sans titre de livre. */
+const MINOR_WORDS = new Set(
+  (
+    "les des une aux par pour sur dans avec sans sous son ses leur leurs cette ces nos vos est qui que " +
+    "the and for with from its edition editions edite nouvelle nouvel collection poche folio french broche " +
+    "livre illustre illustree illustrees revue augmentee corrigee format paperback hardcover"
+  ).split(" "),
+);
+
+/** Mots importants : sans accents, en chiffres pour « XXIe », sans petits mots, au singulier. */
+export function keyWords(s: string): string[] {
+  return normalizeText(s)
+    .split(" ")
+    .map(romanOrdinal)
+    .filter((w) => w.length > 2 && !MINOR_WORDS.has(w))
+    .map((w) => (w.length > 3 && /[sx]$/.test(w) ? w.slice(0, -1) : w));
+}
+
+/** « tome 3 », « vol. II » : le numéro du tome n'est presque jamais lu sur la tranche, il ne compte pas comme un mot en plus. */
+function isVolumeMark(w: string): boolean {
+  return /^(tome|vol|volume|\d+|[ivxlc]+)$/.test(w);
+}
+
+function stripParens(t: string): string {
+  return t.replace(/\([^)]*\)/g, " ");
 }
 
 const ROMAN: Record<string, number> = { i: 1, v: 5, x: 10, l: 50, c: 100 };

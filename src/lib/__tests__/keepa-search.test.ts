@@ -126,3 +126,28 @@ describe("tome seul contre titre général ou intégrale", () => {
     expect(contradictsTitle("Histoire de l'art : L'art moderne II", "Histoire de l'art : l'art moderne II")).toBe(false);
   });
 });
+
+describe("règle générale de correspondance (livres sans ISBN)", () => {
+  const renaissant = { title: "Histoire de l'art : L'art renaissant", authors: ["Élie Faure"] };
+  it("refuse un autre tome au titre collé et le coffret : pas de prix plutôt qu'un faux prix", () => {
+    expect(
+      pickKeepaMatch(renaissant, [
+        { asin: "BOX", title: "Histoire de l'Art (complet en 5 tomes : L'Art Antique, L'Art Médiéval, L'Art Renaissant)", author: "Elie Faure" },
+        { asin: "PLON", title: "Histoire de l'art-l'art médiéval", author: "Elie Faure" },
+      ]),
+    ).toBeNull();
+  });
+  it("2e recherche (titre court) : prend le tome nommé plutôt que l'œuvre complète", () => {
+    const p = pickKeepaMatch(renaissant, [
+      { asin: "BART", title: "HISTOIRE DE L'ART", author: "Elie Faure", stats: { current: [0, 0, 0, 182601] } },
+      { asin: "ANT", title: "Histoire de l'art : l'art antique", author: "Elie Faure", stats: { current: [0, 0, 0, 1000] } },
+      { asin: "REN", title: "Histoire de l'art : l'art renaissant", author: "Elie Faure", stats: { current: [0, 0, 0, 97843] } },
+    ]);
+    expect(p?.asin).toBe("REN");
+  });
+  it("tous les mots du titre principal sont exigés, aux accents et pluriels près", () => {
+    const couleurs = { title: "Dictionnaire des couleurs de notre temps; symbolique et société", authors: ["Michel Pastoureau"] };
+    expect(pickKeepaMatch(couleurs, [{ asin: "C", title: "Dictionnaire des couleur de notre temps", author: "Pastoureau" }])?.asin).toBe("C");
+    expect(pickKeepaMatch(couleurs, [{ asin: "D", title: "Dictionnaire des couleurs", author: "Pastoureau" }])).toBeNull();
+  });
+});
