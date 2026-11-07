@@ -1,7 +1,7 @@
 // Keepa (payant, https://keepa.com/#!api) : données Amazon sous licence.
 // C'est l'alternative légale au scraping d'Amazon, interdit par ses CGU.
 import { env } from "../../env";
-import { contradictsTitle, mainTitle, normalizeText } from "../../books";
+import { contradictsTitle, isBoxSet, mainTitle, normalizeText } from "../../books";
 import type { BookInfo, BookRef, PriceObservation, PriceProvider, ProviderResult, SalesEstimate } from "../types";
 
 // Identifiants de marketplace Amazon chez Keepa.
@@ -163,7 +163,9 @@ export const keepaProvider: PriceProvider = {
 async function storedEdition(book: BookRef, asin: string, domain: number, country: string): Promise<ProviderResult> {
   const { result, product } = await productWithFiche("asin", asin, domain, country);
   const t = product?.title;
-  if (t && ((isBoxSet(t) && !isBoxSet(book.title)) || otherVolume(book.title, t))) return searchByTitle(book, country);
+  if (t && ((isBoxSet(t) && !isBoxSet(book.title)) || otherVolume(book.title, t) || missesVolume(book.title, t))) {
+    return searchByTitle(book, country);
+  }
   return result;
 }
 
@@ -198,26 +200,28 @@ async function checkEdition(book: BookRef, country: string, own: KeepaProduct, o
  * quand les deux ont un sous-titre, il faut un mot en commun.
  */
 export function otherVolume(bookTitle: string, candidateTitle: string): boolean {
-  const words = (s: string) => new Set(normalizeText(s).split(" ").filter((w) => w.length > 2));
-  const subtitle = (title: string) => {
-    // « (Folio essais) », « (French Edition) » : la collection n'est pas un sous-titre.
-    const t = title.replace(/\([^)]*\)/g, " ");
-    const main = words(mainTitle(t));
-    return [...words(t)].filter((w) => !main.has(w));
-  };
-  const bookSub = subtitle(bookTitle);
-  const sub = subtitle(candidateTitle);
+  const bookSub = subtitleWords(bookTitle);
+  const sub = subtitleWords(candidateTitle);
   return bookSub.length > 0 && sub.length > 0 && !sub.some((w) => bookSub.includes(w));
 }
 
-/** Coffret ou intégrale (« Coffret 4 tomes », « Tomes 1 à 4 », « I-II », « L'intégrale ») : pas le prix d'un seul tome. */
-export function isBoxSet(title: string): boolean {
-  const t = title.toLowerCase();
-  return (
-    /\b(coffret|int[ée]grale|tomes|volumes|vol\.? ?\d{1,2} ?(?:à|-|–) ?\d{1,2})\b/.test(t) ||
-    /\b\d{1,2} ?(?:à|-|–) ?\d{1,2}\b/.test(t) ||
-    /(?:^|[\s(,.:])[ivx]{1,4} ?(?:à|-|–|et) ?[ivx]{1,4}(?=$|[\s),.:])/.test(t)
-  );
+/**
+ * Fiche qui ne porte que le titre général (« HISTOIRE DE L'ART », l'œuvre complète en un volume)
+ * alors qu'on cherche un tome (« Histoire de l'art : l'art renaissant ») : aucun mot du nom du tome.
+ */
+export function missesVolume(bookTitle: string, candidateTitle: string): boolean {
+  const bookSub = subtitleWords(bookTitle);
+  if (bookSub.length === 0) return false;
+  const found = new Set(normalizeText(candidateTitle).split(" "));
+  return !bookSub.some((w) => found.has(w));
+}
+
+function subtitleWords(title: string): string[] {
+  const words = (s: string) => new Set(normalizeText(s).split(" ").filter((w) => w.length > 2));
+  // « (Folio essais) », « (French Edition) » : la collection n'est pas un sous-titre.
+  const t = title.replace(/\([^)]*\)/g, " ");
+  const main = words(mainTitle(t));
+  return [...words(t)].filter((w) => !main.has(w));
 }
 
 /** Même livre (titre principal, même auteur, même tome) dans une autre édition, au moins 2 fois mieux classée. */
@@ -298,7 +302,9 @@ export function pickKeepaMatch(book: { title: string; authors: string[] }, produ
     if (p.title && ((isBoxSet(p.title) && !isBoxSet(book.title)) || otherVolume(book.title, p.title))) return false;
     return authorOk && coverage >= 0.75;
   });
-  return matches.sort((a, b) => rank(a) - rank(b))[0] ?? null;
+  // La fiche qui nomme le tome passe avant celle qui n'a que le titre général, puis la mieux classée.
+  const general = (p: KeepaProduct) => (p.title && missesVolume(book.title, p.title) ? 1 : 0);
+  return matches.sort((a, b) => general(a) - general(b) || rank(a) - rank(b))[0] ?? null;
 }
 
 const ROMAN: Record<string, number> = { i: 1, v: 5, x: 10, l: 50, c: 100 };
