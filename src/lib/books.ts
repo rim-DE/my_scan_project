@@ -93,7 +93,19 @@ export function contradictsTitle(readTitle: string, candidateTitle: string): boo
   };
   const isYear = (w: string) => /^(18|19|20)\d\d$/.test(w);
   const extraNumber = [...tokens(mainTitle(candidateTitle))].some((w) => /^\d+$/.test(w) && !isYear(w) && !read.has(w));
-  return clash((w) => VARIANT_WORDS.has(w)) || clash((w) => /^\d+$/.test(w)) || extraNumber;
+  // Un seul tome lu sur la tranche (« Guide des films LZ ») n'est pas l'intégrale ni le coffret.
+  const boxSet = isBoxSet(candidateTitle) && !isBoxSet(readTitle);
+  return clash((w) => VARIANT_WORDS.has(w)) || clash((w) => /^\d+$/.test(w)) || extraNumber || boxSet;
+}
+
+/** Coffret ou intégrale (« Coffret 4 tomes », « Tomes 1 à 4 », « I-II », « L'intégrale ») : pas le prix d'un seul tome. */
+export function isBoxSet(title: string): boolean {
+  const t = title.toLowerCase();
+  return (
+    /\b(coffret|int[ée]grale|tomes|volumes|vol\.? ?\d{1,2} ?(?:à|-|–) ?\d{1,2})\b/.test(t) ||
+    /\b\d{1,2} ?(?:à|-|–) ?\d{1,2}\b/.test(t) ||
+    /(?:^|[\s(,.:])[ivx]{1,4} ?(?:à|-|–|et) ?[ivx]{1,4}(?=$|[\s),.:])/.test(t)
+  );
 }
 
 /** Titre sans son sous-titre : « Tout savoir pour maigrir: Ces vérités… » → « Tout savoir pour maigrir ». */

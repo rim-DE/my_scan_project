@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { isBoxSet, keepaBookInfo, pickKeepaMatch, pickOtherEdition, romanOrdinal, worthEditionCheck } from "../prices/providers/keepa";
+import { keepaBookInfo, missesVolume, pickKeepaMatch, pickOtherEdition, romanOrdinal, worthEditionCheck } from "../prices/providers/keepa";
+import { contradictsTitle, isBoxSet } from "../books";
 
 const book = { title: "Dictionnaire des mots, des phrases, des images", authors: ["Aimé Gabillon"] };
 
@@ -104,5 +105,24 @@ describe("coffrets et autres tomes (recherche par titre)", () => {
   it("garde le coffret quand c'est bien un coffret qu'on cherche", () => {
     const box = { title: "Histoire de l'art tomes 1 à 4", authors: ["Élie Faure"] };
     expect(pickKeepaMatch(box, [{ asin: "BOX", title: "Histoire de l'art, tomes 1 à 4", author: "Elie Faure" }])?.asin).toBe("BOX");
+  });
+});
+
+describe("tome seul contre titre général ou intégrale", () => {
+  const renaissant = { title: "Histoire de l'art : l'art renaissant", authors: ["Élie Faure"] };
+  it("préfère la fiche qui nomme le tome à l'œuvre complète mieux classée", () => {
+    const p = pickKeepaMatch(renaissant, [
+      { asin: "BART", title: "HISTOIRE DE L'ART", author: "Elie Faure", stats: { current: [0, 0, 0, 1000] } },
+      { asin: "FOLIO", title: "Histoire de l'art : l'art renaissant", author: "Elie Faure", stats: { current: [0, 0, 0, 97000] } },
+    ]);
+    expect(p?.asin).toBe("FOLIO");
+    expect(missesVolume(renaissant.title, "HISTOIRE DE L'ART")).toBe(true);
+    expect(missesVolume(renaissant.title, "Histoire de l'art, tome 3 : L'art renaissant (Folio)")).toBe(false);
+    expect(missesVolume("L'Amant", "L'Amant (Minuit)")).toBe(false);
+  });
+  it("à l'identification, un tome lu n'est pas l'intégrale", () => {
+    expect(contradictsTitle("Guide des films LZ", "Guide des films - Intégrale")).toBe(true);
+    expect(contradictsTitle("Histoire de l'art : L'art moderne II", "Histoire de l'art: L'art moderne I-II")).toBe(true);
+    expect(contradictsTitle("Histoire de l'art : L'art moderne II", "Histoire de l'art : l'art moderne II")).toBe(false);
   });
 });
