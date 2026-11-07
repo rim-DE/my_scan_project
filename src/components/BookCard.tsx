@@ -325,7 +325,9 @@ export function BookCard({ detection, photo, photos = [], t, country, lists, pat
           {b.priceStatus === "waiting"
             ? t.book.noPriceWaiting
             : b.priceStatus === "notFound"
-              ? t.book.noPriceNotFound
+              ? b.isbn13
+                ? t.book.noPriceNotFound
+                : t.book.noPriceUnsure
               : b.priceStatus === "outOfList"
                 ? t.book.noPriceOutOfList
                 : t.book.noPrice}

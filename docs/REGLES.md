@@ -69,5 +69,10 @@ Exemple : le *Dictionnaire des symboles* a un prix médian de 18,34 €. Son pro
 - **Prix moyen sur 90 jours** : il est parfois absurde dans le fichier (par exemple 1 622 € pour un Dicobat), ce défaut n'est pas encore corrigé. Je me fie plutôt au prix médian de vente et aux dernières ventes.
 - **Livre hors liste** : ça ne veut pas dire qu'il ne vaut rien. Il a pu sortir à cause des ventes, ou ne jamais être entré. En cas de doute, j'utilise « Actualiser les prix ».
 - **Plusieurs éditions** : quand ma liste contient plusieurs éditions du même livre (par exemple le *Dictionnaire des symboles* de 1982 à 18 € et de 1996 à 30 €), l'appli affiche la plus chère avec le badge « ⚠️ 2 éditions dans ta liste ». Je vérifie l'année ou la couverture avant d'acheter.
-- **Livres sans ISBN** : l'appli cherche le livre sur Amazon par titre et auteur et garde l'édition la plus vendue. Elle écarte les coffrets et intégrales (« tomes 1 à 4 », « I-II »…) et les autres tomes de la même série, pour qu'un seul tome n'affiche pas le prix du coffret. Elle préfère la fiche qui nomme le tome (« L'art renaissant ») à celle qui n'a que le titre général (l'œuvre complète en un volume). À l'identification, un tome lu sur la tranche n'est jamais relié à une notice « intégrale », « I-II » ou « coffret ».
+- **Livres sans ISBN** : l'appli cherche le livre sur Amazon par titre et auteur, avec une règle générale (aucun titre de livre n'est écrit dans le code) :
+  - tous les mots importants du titre principal doivent être dans la fiche Amazon (accents et pluriels ignorés), et l'auteur ;
+  - pas de coffret ni d'intégrale (« tomes 1 à 4 », « I-II », « complet en 5 tomes ») pour un seul tome, ni un autre tome de la série (« l'art médiéval » au lieu de « l'art renaissant ») ;
+  - entre les fiches qui passent : celle qui nomme le tome, puis l'édition la plus vendue ;
+  - rien avec le titre complet : 2e recherche avec le titre court et l'auteur (10 jetons Keepa de plus) ;
+  - toujours rien : pas de prix, et la fiche affiche « À vérifier ». Pas de prix plutôt qu'un faux prix.
 - **Mauvaise identification** : l'appli peut se tromper de livre. Je vérifie le titre et l'édition avec le bouton « emplacement » avant d'acheter.
