@@ -282,10 +282,14 @@ async function keepaGet(url: URL): Promise<Response> {
 
 /** Recherche Amazon par titre et auteur (10 jetons), pour les livres sans ISBN ou dont l'ISBN n'est pas vendu sur Amazon. */
 async function searchByTitle(book: BookRef, country: string): Promise<ProviderResult> {
-  let p = pickKeepaMatch(book, await keepaSearch(book.title, book.authors[0], country));
-  // Rien de sûr avec le titre complet : une 2e recherche avec le titre court et l'auteur (10 jetons de plus).
+  const first = await keepaSearch(book.title, book.authors[0], country);
+  let p = pickKeepaMatch(book, first);
+  // Rien de sûr avec le titre complet, ou seulement une fiche au titre général qui ne nomme pas le tome :
+  // une 2e recherche avec le titre court et l'auteur (10 jetons de plus), puis on choisit parmi les deux.
   const short = mainTitle(book.title);
-  if (!p && short !== book.title.trim()) p = pickKeepaMatch(book, await keepaSearch(short, book.authors[0], country));
+  if ((!p || missesVolume(book.title, p.title ?? "")) && short !== book.title.trim()) {
+    p = pickKeepaMatch(book, [...first, ...(await keepaSearch(short, book.authors[0], country))]);
+  }
   if (!p?.asin) return { observations: [] };
   return { ...productResult(p, country), asin: p.asin };
 }
