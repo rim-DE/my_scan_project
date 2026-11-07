@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { keepaBookInfo, pickKeepaMatch, romanOrdinal } from "../prices/providers/keepa";
+import { keepaBookInfo, pickKeepaMatch, pickOtherEdition, romanOrdinal, worthEditionCheck } from "../prices/providers/keepa";
 
 const book = { title: "Dictionnaire des mots, des phrases, des images", authors: ["Aimé Gabillon"] };
 
@@ -50,5 +50,35 @@ describe("keepaBookInfo (identification par Amazon)", () => {
     expect(info?.title).toBe("Survivre sans écrans (quand on est ado)");
     expect(info?.authors).toEqual(["Jean Dupont", "Marie Durand"]);
     expect(info?.isbn13).toBe("9782000000001");
+  });
+});
+
+describe("vérification de l'édition des livres chers", () => {
+  const rank = (r: number) => ({ current: [0, 0, 0, r] });
+  const faure = { title: "Histoire de l'art : l'art antique", authors: ["Élie Faure"] };
+  const own = { asin: "OWN", title: "Histoire de l'art : l'art antique (relié)", author: "Élie Faure", stats: rank(900000) };
+
+  it("prend le Folio bien plus vendu du même tome", () => {
+    const p = pickOtherEdition(faure, own, [
+      own,
+      { asin: "MOD", title: "Histoire de l'art : l'art moderne", author: "Élie Faure", stats: rank(20000) },
+      { asin: "FOLIO", title: "Histoire de l'art : L'art antique", author: "Élie Faure", stats: rank(60000) },
+    ]);
+    expect(p?.asin).toBe("FOLIO");
+  });
+  it("ne prend pas un autre tome, ni une édition à peine mieux classée", () => {
+    expect(pickOtherEdition(faure, own, [{ asin: "MOD", title: "Histoire de l'art : l'art moderne", author: "Élie Faure", stats: rank(20000) }])).toBeNull();
+    expect(pickOtherEdition(faure, own, [{ asin: "F", title: "Histoire de l'art : l'art antique", author: "Élie Faure", stats: rank(600000) }])).toBeNull();
+  });
+  it("reconnaît le même livre sous un titre Amazon plus long", () => {
+    const k = { title: "Du spirituel dans l'art (1911) : Suivi de Du matériel dans l'art", authors: ["Vassily Kandinsky"] };
+    const mine = { asin: "M", title: k.title, author: "Kandinsky", stats: rank(800000) };
+    const folio = { asin: "F", title: "Du Spirituel dans l'art et dans la peinture en particulier", author: "Wassily Kandinsky", stats: rank(27000) };
+    expect(pickOtherEdition(k, mine, [folio])?.asin).toBe("F");
+  });
+  it("ne vérifie que les livres à 15 € et plus", () => {
+    const obs = (offerType: "SOLD" | "USED", priceCents: number) => ({ platform: "amazon", offerType, priceCents, currency: "EUR" });
+    expect(worthEditionCheck({ observations: [obs("SOLD", 1200), obs("SOLD", 1300), obs("USED", 4000)] })).toBe(false);
+    expect(worthEditionCheck({ observations: [obs("USED", 5900)] })).toBe(true);
   });
 });

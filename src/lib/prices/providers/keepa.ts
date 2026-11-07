@@ -1,7 +1,7 @@
 // Keepa (payant, https://keepa.com/#!api) : données Amazon sous licence.
 // C'est l'alternative légale au scraping d'Amazon, interdit par ses CGU.
 import { env } from "../../env";
-import { normalizeText } from "../../books";
+import { contradictsTitle, mainTitle, normalizeText } from "../../books";
 import type { BookInfo, BookRef, PriceObservation, PriceProvider, ProviderResult, SalesEstimate } from "../types";
 
 // Identifiants de marketplace Amazon chez Keepa.
@@ -140,9 +140,17 @@ export const keepaProvider: PriceProvider = {
   enabled: () => Boolean(env.keepaApiKey()),
   async fetch(book, country) {
     const d = DOMAINS[country] ?? DOMAINS.FR;
+    // Autre édition déjà choisie (la plus vendue, ou celle qui est sur Amazon) : on la suit directement.
+    if (book.asin && book.asin !== book.isbn10) return productBy("asin", book.asin, d.id, country);
     if (book.isbn13) {
-      const byIsbn = await productBy("code", book.isbn13, d.id, country);
-      if (byIsbn.observations.length > 0) return byIsbn;
+      const found = await productWithFiche("code", book.isbn13, d.id, country);
+      if (found.result.observations.length > 0) {
+        // Livre cher et jamais vérifié : est-ce bien l'édition qui se vend ? (BiblioScan prend la plus vendue.)
+        if (!book.asin && book.isbn10 && found.product && worthEditionCheck(found.result)) {
+          return checkEdition(book, country, found.product, found.result);
+        }
+        return found.result;
+      }
     }
     // Rien sous cet ISBN (livre sans ISBN, édition France Loisirs ou numérique…) : on prend l'édition
     // Amazon du même titre et du même auteur, trouvée par recherche puis retenue (ASIN) pour les fois suivantes.
@@ -151,7 +159,65 @@ export const keepaProvider: PriceProvider = {
   },
 };
 
+/** À partir de ce prix (ventes, sinon offre d'occasion), une erreur d'édition coûte cher : on vérifie (rim, 7/11/2026). */
+export const EDITION_CHECK_CENTS = 1500;
+/** L'autre édition doit être nettement mieux classée (au moins 2 fois) pour remplacer celle trouvée par l'ISBN. */
+const BETTER_RANK_FACTOR = 2;
+
+export function worthEditionCheck(r: ProviderResult): boolean {
+  const sold = r.observations.filter((o) => o.offerType === "SOLD").map((o) => o.priceCents).sort((a, b) => a - b);
+  const used = r.observations.filter((o) => o.offerType === "USED").map((o) => o.priceCents);
+  const price = sold.length ? sold[sold.length >> 1] : used.length ? Math.min(...used) : 0;
+  return price >= EDITION_CHECK_CENTS;
+}
+
+/**
+ * Cherche les autres éditions du même livre (10 jetons) et garde la plus vendue si elle l'est nettement plus :
+ * un Folio à 5 € ne doit pas s'afficher au prix d'une édition reliée à 60 €. L'ASIN retenu est enregistré,
+ * pour ne pas refaire la recherche aux prochaines mises à jour.
+ */
+async function checkEdition(book: BookRef, country: string, own: KeepaProduct, ownResult: ProviderResult): Promise<ProviderResult> {
+  // Retenir son propre ASIN marque le livre comme vérifié ; si ce n'est pas son ISBN-10, il passerait pour « autre édition ».
+  const keep = own.asin === book.isbn10 ? { ...ownResult, asin: own.asin } : ownResult;
+  const products = await keepaSearch(mainTitle(book.title), book.authors[0], country).catch(() => null);
+  if (!products) return ownResult; // recherche impossible : on réessaiera la prochaine fois
+  const other = pickOtherEdition(book, own, products);
+  return other?.asin ? { ...productResult(other, country), asin: other.asin } : keep;
+}
+
+/** Même livre (titre principal, même auteur, même tome) dans une autre édition, au moins 2 fois mieux classée. */
+export function pickOtherEdition(book: { title: string; authors: string[] }, own: KeepaProduct, products: KeepaProduct[]): KeepaProduct | null {
+  const rank = (p: KeepaProduct) => pos(p.stats?.current?.[SALES_RANK]) ?? Infinity;
+  const words = (s: string) => new Set(normalizeText(s).split(" ").filter((w) => w.length > 2));
+  const subtitle = (t: string) => {
+    const main = words(mainTitle(t));
+    return [...words(t)].filter((w) => !main.has(w));
+  };
+  const bookSub = subtitle(book.title);
+  const candidates = products.filter((p) => {
+    if (!p.asin || p.asin === own.asin || !p.title) return false;
+    if (contradictsTitle(book.title, p.title)) return false;
+    // Deux tomes d'une série ont le même titre principal (« Histoire de l'art : l'art antique / l'art moderne ») :
+    // quand les deux ont un sous-titre, il faut un mot en commun.
+    const sub = subtitle(p.title);
+    if (bookSub.length && sub.length && !sub.some((w) => bookSub.includes(w))) return false;
+    return true;
+  });
+  const best = pickKeepaMatch({ title: mainTitle(book.title), authors: book.authors }, candidates);
+  if (!best) return null;
+  return rank(best) * BETTER_RANK_FACTOR <= rank(own) ? best : null;
+}
+
 async function productBy(param: "code" | "asin", value: string, domain: number, country: string): Promise<ProviderResult> {
+  return (await productWithFiche(param, value, domain, country)).result;
+}
+
+async function productWithFiche(
+  param: "code" | "asin",
+  value: string,
+  domain: number,
+  country: string,
+): Promise<{ result: ProviderResult; product: KeepaProduct | null }> {
   const url = new URL("https://api.keepa.com/product");
   url.searchParams.set("domain", String(domain));
   url.searchParams.set(param, value);
@@ -161,7 +227,7 @@ async function productBy(param: "code" | "asin", value: string, domain: number, 
   const res = await keepaGet(url);
   const json = (await res.json()) as { products?: KeepaProduct[] };
   const p = json.products?.[0];
-  return p ? productResult(p, country) : { observations: [] };
+  return p ? { result: productResult(p, country), product: p } : { result: { observations: [] }, product: null };
 }
 
 function productResult(p: KeepaProduct, country: string): ProviderResult {
