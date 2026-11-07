@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { keepaBookInfo, pickKeepaMatch, pickOtherEdition, romanOrdinal, worthEditionCheck } from "../prices/providers/keepa";
+import { isBoxSet, keepaBookInfo, pickKeepaMatch, pickOtherEdition, romanOrdinal, worthEditionCheck } from "../prices/providers/keepa";
 
 const book = { title: "Dictionnaire des mots, des phrases, des images", authors: ["Aimé Gabillon"] };
 
@@ -80,5 +80,29 @@ describe("vérification de l'édition des livres chers", () => {
     const obs = (offerType: "SOLD" | "USED", priceCents: number) => ({ platform: "amazon", offerType, priceCents, currency: "EUR" });
     expect(worthEditionCheck({ observations: [obs("SOLD", 1200), obs("SOLD", 1300), obs("USED", 4000)] })).toBe(false);
     expect(worthEditionCheck({ observations: [obs("USED", 5900)] })).toBe(true);
+  });
+});
+
+describe("coffrets et autres tomes (recherche par titre)", () => {
+  it("reconnaît un coffret ou une intégrale", () => {
+    expect(isBoxSet("Histoire de l'art, tomes 1 à 4")).toBe(true);
+    expect(isBoxSet("Histoire de l'art - Coffret 4 volumes")).toBe(true);
+    expect(isBoxSet("Les Misérables I-II")).toBe(true);
+    expect(isBoxSet("Les Misérables, tome II")).toBe(false);
+    expect(isBoxSet("Lettres 1914-1918")).toBe(false);
+    expect(isBoxSet("Le Siècle de Louis XIV")).toBe(false);
+  });
+  it("un seul tome ne prend ni le coffret ni un autre tome", () => {
+    const faure = { title: "Histoire de l'art : l'art renaissant", authors: ["Élie Faure"] };
+    const p = pickKeepaMatch(faure, [
+      { asin: "BOX", title: "Histoire de l'art, tomes 1 à 4", author: "Elie Faure", stats: { current: [0, 0, 0, 1000] } },
+      { asin: "MOD", title: "Histoire de l'art : L'art moderne", author: "Elie Faure", stats: { current: [0, 0, 0, 2000] } },
+      { asin: "REN", title: "Histoire de l'art : L'art renaissant (Folio essais)", author: "Elie Faure", stats: { current: [0, 0, 0, 50000] } },
+    ]);
+    expect(p?.asin).toBe("REN");
+  });
+  it("garde le coffret quand c'est bien un coffret qu'on cherche", () => {
+    const box = { title: "Histoire de l'art tomes 1 à 4", authors: ["Élie Faure"] };
+    expect(pickKeepaMatch(box, [{ asin: "BOX", title: "Histoire de l'art, tomes 1 à 4", author: "Elie Faure" }])?.asin).toBe("BOX");
   });
 });

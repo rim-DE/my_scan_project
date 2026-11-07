@@ -141,7 +141,7 @@ export const keepaProvider: PriceProvider = {
   async fetch(book, country) {
     const d = DOMAINS[country] ?? DOMAINS.FR;
     // Autre édition déjà choisie (la plus vendue, ou celle qui est sur Amazon) : on la suit directement.
-    if (book.asin && book.asin !== book.isbn10) return productBy("asin", book.asin, d.id, country);
+    if (book.asin && book.asin !== book.isbn10) return storedEdition(book, book.asin, d.id, country);
     if (book.isbn13) {
       const found = await productWithFiche("code", book.isbn13, d.id, country);
       if (found.result.observations.length > 0) {
@@ -154,10 +154,18 @@ export const keepaProvider: PriceProvider = {
     }
     // Rien sous cet ISBN (livre sans ISBN, édition France Loisirs ou numérique…) : on prend l'édition
     // Amazon du même titre et du même auteur, trouvée par recherche puis retenue (ASIN) pour les fois suivantes.
-    if (book.asin) return productBy("asin", book.asin, d.id, country);
+    if (book.asin) return storedEdition(book, book.asin, d.id, country);
     return searchByTitle(book, country);
   },
 };
+
+/** Fiche retenue avant le 7/11/2026 : si c'était un coffret ou un autre tome, on refait la recherche par titre. */
+async function storedEdition(book: BookRef, asin: string, domain: number, country: string): Promise<ProviderResult> {
+  const { result, product } = await productWithFiche("asin", asin, domain, country);
+  const t = product?.title;
+  if (t && ((isBoxSet(t) && !isBoxSet(book.title)) || otherVolume(book.title, t))) return searchByTitle(book, country);
+  return result;
+}
 
 /** À partir de ce prix (ventes, sinon offre d'occasion), une erreur d'édition coûte cher : on vérifie (rim, 7/11/2026). */
 export const EDITION_CHECK_CENTS = 1500;
@@ -185,31 +193,44 @@ async function checkEdition(book: BookRef, country: string, own: KeepaProduct, o
   return other?.asin ? { ...productResult(other, country), asin: other.asin } : keep;
 }
 
-/** Même livre (titre principal, même auteur, même tome) dans une autre édition, au moins 2 fois mieux classée. */
-export function pickOtherEdition(book: { title: string; authors: string[] }, own: KeepaProduct, products: KeepaProduct[]): KeepaProduct | null {
-  const rank = (p: KeepaProduct) => pos(p.stats?.current?.[SALES_RANK]) ?? Infinity;
+/**
+ * Deux tomes d'une série ont le même titre principal (« Histoire de l'art : l'art antique / l'art moderne ») :
+ * quand les deux ont un sous-titre, il faut un mot en commun.
+ */
+export function otherVolume(bookTitle: string, candidateTitle: string): boolean {
   const words = (s: string) => new Set(normalizeText(s).split(" ").filter((w) => w.length > 2));
-  const subtitle = (t: string) => {
+  const subtitle = (title: string) => {
+    // « (Folio essais) », « (French Edition) » : la collection n'est pas un sous-titre.
+    const t = title.replace(/\([^)]*\)/g, " ");
     const main = words(mainTitle(t));
     return [...words(t)].filter((w) => !main.has(w));
   };
-  const bookSub = subtitle(book.title);
+  const bookSub = subtitle(bookTitle);
+  const sub = subtitle(candidateTitle);
+  return bookSub.length > 0 && sub.length > 0 && !sub.some((w) => bookSub.includes(w));
+}
+
+/** Coffret ou intégrale (« Coffret 4 tomes », « Tomes 1 à 4 », « I-II », « L'intégrale ») : pas le prix d'un seul tome. */
+export function isBoxSet(title: string): boolean {
+  const t = title.toLowerCase();
+  return (
+    /\b(coffret|int[ée]grale|tomes|volumes|vol\.? ?\d{1,2} ?(?:à|-|–) ?\d{1,2})\b/.test(t) ||
+    /\b\d{1,2} ?(?:à|-|–) ?\d{1,2}\b/.test(t) ||
+    /(?:^|[\s(,.:])[ivx]{1,4} ?(?:à|-|–|et) ?[ivx]{1,4}(?=$|[\s),.:])/.test(t)
+  );
+}
+
+/** Même livre (titre principal, même auteur, même tome) dans une autre édition, au moins 2 fois mieux classée. */
+export function pickOtherEdition(book: { title: string; authors: string[] }, own: KeepaProduct, products: KeepaProduct[]): KeepaProduct | null {
+  const rank = (p: KeepaProduct) => pos(p.stats?.current?.[SALES_RANK]) ?? Infinity;
   const candidates = products.filter((p) => {
     if (!p.asin || p.asin === own.asin || !p.title) return false;
     if (contradictsTitle(book.title, p.title)) return false;
-    // Deux tomes d'une série ont le même titre principal (« Histoire de l'art : l'art antique / l'art moderne ») :
-    // quand les deux ont un sous-titre, il faut un mot en commun.
-    const sub = subtitle(p.title);
-    if (bookSub.length && sub.length && !sub.some((w) => bookSub.includes(w))) return false;
-    return true;
+    return !otherVolume(book.title, p.title);
   });
   const best = pickKeepaMatch({ title: mainTitle(book.title), authors: book.authors }, candidates);
   if (!best) return null;
   return rank(best) * BETTER_RANK_FACTOR <= rank(own) ? best : null;
-}
-
-async function productBy(param: "code" | "asin", value: string, domain: number, country: string): Promise<ProviderResult> {
-  return (await productWithFiche(param, value, domain, country)).result;
 }
 
 async function productWithFiche(
@@ -273,6 +294,8 @@ export function pickKeepaMatch(book: { title: string; authors: string[] }, produ
     const found = new Set(words(`${p.title ?? ""} ${p.author ?? ""}`));
     const coverage = titleWords.filter((w) => found.has(w)).length / titleWords.length;
     const authorOk = surnames.length === 0 || surnames.some((s) => found.has(s));
+    // Un seul tome ne doit pas prendre le prix du coffret, ni celui d'un autre tome de la série.
+    if (p.title && ((isBoxSet(p.title) && !isBoxSet(book.title)) || otherVolume(book.title, p.title))) return false;
     return authorOk && coverage >= 0.75;
   });
   return matches.sort((a, b) => rank(a) - rank(b))[0] ?? null;

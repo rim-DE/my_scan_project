@@ -64,7 +64,7 @@ export async function refreshPrices(bookId: string, country: string, opts: { for
             observedAt: o.observedAt,
           })),
         }),
-        ...(asin && !book.asin ? [prisma.book.update({ where: { id: bookId }, data: { asin } })] : []),
+        ...(asin && asin !== book.asin ? [prisma.book.update({ where: { id: bookId }, data: { asin } })] : []),
         ...(sales || info
           ? [
               prisma.book.update({
