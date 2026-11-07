@@ -195,6 +195,11 @@ export function BookCard({ detection, photo, photos = [], t, country, lists, pat
         </div>
 
         <div className="min-w-0 flex-1 space-y-3">
+          {/* Titre et auteur toujours visibles, pour retrouver un livre dans la liste. */}
+          <div>
+            <h3 className="line-clamp-2 text-base font-semibold leading-tight">{b.title}</h3>
+            {b.authors.length > 0 && <p className="line-clamp-1 text-sm text-slate-500">{b.authors.join(", ")}</p>}
+          </div>
           <div className="space-y-1">
             {/* Sans vente connue, la médiane vient des offres en cours : on le dit. */}
             <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
