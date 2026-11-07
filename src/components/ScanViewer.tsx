@@ -123,14 +123,15 @@ export function ScanViewer({ photos, detections, t, country, lists, path, locale
   }, [running, scanId, bangers.length]);
 
   const shown = useMemo(() => {
-    const needle = q.toLowerCase();
+    // Sans accents ni majuscules : « medieval » trouve « médiéval ».
+    const needle = normalizeText(q).trim();
     const filtered = detections.filter((d) =>
       passesFilters(d, filters, small) &&
       // « Hors stock » : on cache les livres que tu as déjà ; « Pépites » : on ne garde qu'elles.
       !(sort === "outOfStock" && d.inStock) &&
       !(sort === "bangers" && !d.book?.metrics.banger) &&
       [d.rawTitle ?? "", d.rawAuthor ?? "", d.book?.title ?? "", d.book?.isbn13 ?? "", ...(d.book?.authors ?? [])].some((v) =>
-        v.toLowerCase().includes(needle),
+        normalizeText(v).includes(needle),
       ),
     );
     return sort === "position" ? filtered : [...filtered].sort((a, b) => sortKey(b, sort) - sortKey(a, sort));
@@ -228,13 +229,23 @@ export function ScanViewer({ photos, detections, t, country, lists, path, locale
                 </button>
               ))}
             </div>
-            <button
-              className="flex w-full items-center gap-3 rounded-full border border-slate-300 px-5 py-3 text-left text-base font-semibold"
-              onClick={() => setShowFilters(true)}
-            >
-              <span aria-hidden>⚙️</span> {t.scan.filters.button}
-              {activeFilters > 0 && <span className="rounded-full bg-brand px-2 text-xs text-ink">{activeFilters}</span>}
-            </button>
+            <div className="flex gap-2">
+              {/* Recherche toujours visible en haut : « Faure », « renaissant », un ISBN… */}
+              <input
+                type="search"
+                className="input min-w-0 flex-1 rounded-full px-5 py-3 text-base"
+                placeholder={`🔍 ${t.scan.search}`}
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+              />
+              <button
+                className="flex shrink-0 items-center gap-2 rounded-full border border-slate-300 px-5 py-3 text-left text-base font-semibold"
+                onClick={() => setShowFilters(true)}
+              >
+                <span aria-hidden>⚙️</span> {t.scan.filters.button}
+                {activeFilters > 0 && <span className="rounded-full bg-brand px-2 text-xs text-ink">{activeFilters}</span>}
+              </button>
+            </div>
           </div>
           <div className="card space-y-3">
             <div className="flex flex-wrap items-center gap-2">
@@ -246,7 +257,6 @@ export function ScanViewer({ photos, detections, t, country, lists, path, locale
                   {fmt(t.scan.bangersButton, { n: bangers.length })}
                 </button>
               )}
-              <input className="input min-w-0 flex-1" placeholder={t.scan.search} value={q} onChange={(e) => setQ(e.target.value)} />
             </div>
             <p className="text-sm text-slate-600">{fmt(t.scan.booksFound, { n: shown.length })}</p>
           </div>
@@ -307,4 +317,9 @@ export function ScanViewer({ photos, detections, t, country, lists, path, locale
       )}
     </div>
   );
+}
+
+/** Minuscules sans accents, pour la recherche. */
+function normalizeText(s: string): string {
+  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
