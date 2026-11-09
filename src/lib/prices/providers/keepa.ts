@@ -367,16 +367,24 @@ export function romanOrdinal(w: string): string {
   return `${n}e`;
 }
 
+/**
+ * Texte envoyé à la recherche Amazon : le titre tel qu'il s'écrit (apostrophes, accents, deux-points), car Amazon
+ * cherche mal sans eux (« histoire de l art » ne trouve pas « Histoire de l'art : l'art renaissant »).
+ * Seul « XXIe » devient « 21e », plus courant sur Amazon ; le nom de famille de l'auteur suffit.
+ */
+export function keepaSearchTerm(title: string, author: string | null | undefined): string {
+  const t = title.replace(/(?<!\p{L})[IVXLC]{2,}(?:e|ème|eme)(?!\p{L})/giu, (w) => romanOrdinal(normalizeText(w))).replace(/\s+/g, " ").trim();
+  const surname = author?.trim().split(/\s+/).at(-1) ?? "";
+  return `${t} ${surname}`.trim();
+}
+
 /** Recherche de livres sur Amazon via Keepa (10 jetons). Sert aussi à identifier les livres que les catalogues ne trouvent pas. */
 export async function keepaSearch(title: string, author: string | null | undefined, country = "FR"): Promise<KeepaProduct[]> {
   const d = DOMAINS[country] ?? DOMAINS.FR;
   const url = new URL("https://api.keepa.com/search");
   url.searchParams.set("domain", String(d.id));
   url.searchParams.set("type", "product");
-  // « XXIe » s'écrit souvent « 21e » sur Amazon ; le nom de famille de l'auteur suffit.
-  const words = normalizeText(title).split(" ").map(romanOrdinal).join(" ");
-  const surname = author ? normalizeText(author).split(" ").at(-1) : "";
-  url.searchParams.set("term", `${words} ${surname}`.trim());
+  url.searchParams.set("term", keepaSearchTerm(title, author));
   url.searchParams.set("stats", "90");
   url.searchParams.set("rating", "1");
   const res = await keepaGet(url);

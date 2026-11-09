@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { keepaBookInfo, missesVolume, pickKeepaMatch, pickOtherEdition, romanOrdinal, worthEditionCheck } from "../prices/providers/keepa";
+import { keepaBookInfo, keepaSearchTerm, missesVolume, pickKeepaMatch, pickOtherEdition, romanOrdinal, worthEditionCheck } from "../prices/providers/keepa";
 import { contradictsTitle, isBoxSet } from "../books";
 
 const book = { title: "Dictionnaire des mots, des phrases, des images", authors: ["Aimé Gabillon"] };
@@ -149,5 +149,12 @@ describe("règle générale de correspondance (livres sans ISBN)", () => {
     const couleurs = { title: "Dictionnaire des couleurs de notre temps; symbolique et société", authors: ["Michel Pastoureau"] };
     expect(pickKeepaMatch(couleurs, [{ asin: "C", title: "Dictionnaire des couleur de notre temps", author: "Pastoureau" }])?.asin).toBe("C");
     expect(pickKeepaMatch(couleurs, [{ asin: "D", title: "Dictionnaire des couleurs", author: "Pastoureau" }])).toBeNull();
+  });
+});
+
+describe("texte de la recherche Amazon", () => {
+  it("garde apostrophes et accents, convertit XXIe", () => {
+    expect(keepaSearchTerm("Histoire de l'art: L'art renaissant", "Élie Faure")).toBe("Histoire de l'art: L'art renaissant Faure");
+    expect(keepaSearchTerm("Le Kit du XXIe siècle", "François Reynaert")).toBe("Le Kit du 21e siècle Reynaert");
   });
 });
