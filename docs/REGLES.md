@@ -75,4 +75,8 @@ Exemple : le *Dictionnaire des symboles* a un prix médian de 18,34 €. Son pro
   - entre les fiches qui passent : celle qui nomme le tome, puis l'édition la plus vendue ;
   - rien avec le titre complet : 2e recherche avec le titre court et l'auteur (10 jetons Keepa de plus) ;
   - toujours rien : pas de prix, et la fiche affiche « À vérifier ». Pas de prix plutôt qu'un faux prix.
+- **Choix de l'édition dans les catalogues** (règle générale, depuis le 9/11/2026) :
+  - une réédition imprimée à la demande (Books on Demand, Lulu, Hachette BnF, Amazon KDP…) passe après l'édition normale : elle a souvent un prix élevé mais presque aucune vente ;
+  - une version dérivée (adaptation en BD « d'après le roman », « l'album », édition bilingue, illustrée, collector) passe après le livre lui-même, sauf si la tranche porte ce mot ;
+  - si l'auteur lu sur la tranche n'est pas celui de la fiche, seule une fiche au titre exactement identique est acceptée (« La Rose blanche » de Glen Cook n'est pas celle d'Amy Ewing).
 - **Mauvaise identification** : l'appli peut se tromper de livre. Je vérifie le titre et l'édition avec le bouton « emplacement » avant d'acheter.

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CatalogUnavailableError, lookupByTitle, mainTitle, parseBnfRecords, parseSudocRecords, lookupCacheKey, normalizeText, parseGoogleVolume, parseOpenLibraryDoc, scoreCandidate, similarity, MIN_MATCH_SCORE } from "../books";
+import { authorContradicts, isDerivedEdition, isOnDemandEdition, CatalogUnavailableError, lookupByTitle, mainTitle, parseBnfRecords, parseSudocRecords, lookupCacheKey, normalizeText, parseGoogleVolume, parseOpenLibraryDoc, scoreCandidate, similarity, MIN_MATCH_SCORE } from "../books";
 
 describe("identification des livres", () => {
   it("normalise le texte (accents, ponctuation)", () => {
@@ -268,5 +268,43 @@ describe("catalogue de la BnF", () => {
     expect((await p)?.isbn13).toBe("9782266196888");
     vi.unstubAllGlobals();
     vi.useRealTimers();
+  });
+});
+
+describe("choix de l'édition (scan_18, 9/11/2026)", () => {
+  const base = { isbn10: null, publishedDate: null, language: "fr", pageCount: null, coverUrl: null, listPriceCents: null, source: "google" as const };
+
+  it("préfère l'édition normale à une réédition à la demande", () => {
+    const pod = { ...base, isbn13: "9781387892228", title: "L' Homme Qui Rit", authors: ["Victor Hugo"], publisher: "Lulu.com" };
+    const folio = { ...base, isbn13: "9782080703842", title: "L'homme qui rit", authors: ["Victor Hugo"], publisher: "Flammarion" };
+    const bod = { ...base, isbn13: "9782322694594", title: "Colomba", authors: ["Prosper Mérimée"], publisher: null };
+    const read = { title: "L'homme qui rit", author: "Victor Hugo" };
+    expect(scoreCandidate(read, folio)).toBeGreaterThan(scoreCandidate(read, pod));
+    expect(isOnDemandEdition(bod)).toBe(true);
+    expect(isOnDemandEdition({ isbn13: "9782070113859", publisher: "Gallimard" })).toBe(false);
+    expect(isOnDemandEdition({ isbn13: null, publisher: "Hachette Livre BNF" })).toBe(true);
+  });
+
+  it("ne prend pas une adaptation en BD, un album ou une édition bilingue pour le livre", () => {
+    expect(isDerivedEdition("Crénom, Baudelaire !", "Crénom, Baudelaire! : d'après le roman de Jean Teulé")).toBe(true);
+    expect(isDerivedEdition("Femmes de dictateur", "Femmes de dictateur : L'album")).toBe(true);
+    expect(isDerivedEdition("Contes des mille et une nuits", "Les Mille et Une Nuits: Trois contes, édition bilingue français-arabe")).toBe(true);
+    expect(isDerivedEdition("Inferno", "Inferno - édition illustrée")).toBe(true);
+    expect(isDerivedEdition("Après la pluie", "Après la pluie")).toBe(false);
+    expect(isDerivedEdition("Femmes de dictateur", "Femmes de dictateur")).toBe(false);
+    const bd = { ...base, isbn13: "9782754842341", title: "Crénom, Baudelaire! : d'après le roman de Jean Teulé", authors: ["Dominique Gelli", "Jean Teulé"], publisher: "Delcourt" };
+    const roman = { ...base, isbn13: "9782080208842", title: "Crénom, Baudelaire !", authors: ["Jean Teulé"], publisher: "Mialet Barrault" };
+    const read = { title: "Crénom, Baudelaire !", author: "Jean Teulé" };
+    expect(scoreCandidate(read, roman)).toBeGreaterThan(scoreCandidate(read, bd));
+  });
+
+  it("refuse un titre approchant d'un autre auteur, mais garde le titre exact si l'auteur est mal lu", () => {
+    const ewing = { ...base, isbn13: "9782221190951", title: "Le joyau - livre II La Rose blanche", authors: ["Amy Ewing"], publisher: "Robert Laffont" };
+    const reut = { ...base, isbn13: "9782364262973", title: "Eden sans risque : journal de (20)14", authors: ["Tita Reut"], publisher: null };
+    expect(scoreCandidate({ title: "La Rose Blanche", author: "Glen Cook" }, ewing)).toBe(0);
+    expect(scoreCandidate({ title: "Sans Eden", author: "Maïa Thiriet" }, reut)).toBe(0);
+    expect(authorContradicts("Collectif", ewing)).toBe(false);
+    expect(authorContradicts("Cook", { authors: ["Glen Cook"], publisher: null })).toBe(false);
+    expect(authorContradicts("E-E Schmit", { authors: ["Éric-Emmanuel Schmitt"], publisher: null })).toBe(false);
   });
 });
