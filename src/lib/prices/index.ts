@@ -44,7 +44,10 @@ export async function refreshPrices(bookId: string, country: string, opts: { for
 
     try {
       // Livre du fichier de pépites (mis à jour chaque semaine) : ses infos Keepa y sont déjà, sans jeton.
-      const pepite = provider.id === "keepa" && country === "FR" ? pepiteOf(ref) : null;
+      // Seulement par ISBN : un livre sans ISBN relié à une fiche Amazon par recherche de titre repasse par Keepa,
+      // qui vérifie que la fiche est bien la sienne (l'œuvre complète « HISTOIRE DE L'ART » est une pépite,
+      // mais pas « L'art renaissant »).
+      const pepite = provider.id === "keepa" && country === "FR" && (ref.isbn13 || ref.isbn10) ? pepiteOf(ref) : null;
       const { observations, sales, info, asin } =
         pepite && isFreshPepite(pepite) ? pepiteResult(pepite) : await provider.fetch(ref, country);
       await prisma.$transaction([
