@@ -113,6 +113,53 @@ export function mainTitle(title: string): string {
   return title.split(/\s*[:(]|\s+[-–]\s+|\s*[.;]\s+/)[0].trim() || title;
 }
 
+// ---------- Éditions à éviter ----------
+
+/**
+ * Rééditions imprimées à la demande (Books on Demand, Lulu, Hachette BnF, Amazon KDP…) : souvent un prix élevé
+ * sur Amazon mais presque aucune vente. On les reconnaît à l'éditeur ou au début de l'ISBN.
+ */
+const ON_DEMAND_ISBN = [/^978232[29]/, /^9781387/, /^9798/, /^9780353/, /^9781016/, /^9782335/];
+const ON_DEMAND_PUBLISHER =
+  /books on demand|\bbod\b|lulu|hachette (livre )?bnf|independently published|createspace|legare street|forgotten books|ligaran|culturea|nabu press|kessinger|wentworth|outlook verlag|hansebooks|alpha editions|prodinnova|collection xix|primento/;
+
+export function isOnDemandEdition(c: Pick<BookInfo, "isbn13" | "publisher">): boolean {
+  if (c.isbn13 && ON_DEMAND_ISBN.some((r) => r.test(c.isbn13!))) return true;
+  return c.publisher ? ON_DEMAND_PUBLISHER.test(normalizeText(c.publisher)) : false;
+}
+
+/**
+ * Mots d'une version dérivée du livre (adaptation en BD, album illustré, édition bilingue, collector…) :
+ * pas le livre lu sur la tranche, sauf si la tranche les porte aussi.
+ */
+const DERIVED_WORDS = ["album", "bd", "bilingue", "illustree", "illustre", "collector", "manga", "adaptation", "adapte", "adaptee", "apres"];
+
+export function isDerivedEdition(readTitle: string, candidateTitle: string): boolean {
+  const read = new Set(normalizeText(readTitle).split(" "));
+  const found = normalizeText(candidateTitle);
+  const words = new Set(found.split(" "));
+  // « d'après le roman de… » : « après » seul est un mot courant des titres.
+  return DERIVED_WORDS.some((w) => !read.has(w) && (w === "apres" ? ` ${found} `.includes(" d apres ") : words.has(w)));
+}
+
+/** Pénalité qui fait passer l'édition normale du livre avant une réédition à la demande ou une adaptation. */
+export const ODD_EDITION_PENALTY = 0.2;
+
+const GENERIC_AUTHORS = new Set(["collectif", "anonyme", "divers", "auteurs", "auteur", "collective"]);
+
+/**
+ * L'auteur lu sur la tranche n'apparaît pas du tout parmi les auteurs de la fiche (« La Rose blanche » de Glen Cook
+ * n'est pas celle d'Amy Ewing). Un mot coupé (« Cook » / « Cooke ») compte ; un auteur générique (« Collectif ») ne prouve rien.
+ */
+export function authorContradicts(readAuthor: string | null | undefined, c: Pick<BookInfo, "authors" | "publisher">): boolean {
+  if (!readAuthor || c.authors.length === 0) return false;
+  const read = [...tokens(readAuthor)].filter((w) => w.length >= 3);
+  if (read.length === 0 || read.some((w) => GENERIC_AUTHORS.has(w))) return false;
+  const found = [...tokens(`${c.authors.join(" ")} ${c.publisher ?? ""}`)];
+  const hit = (w: string) => found.some((f) => f === w || (Math.min(w.length, f.length) >= 4 && (f.startsWith(w) || w.startsWith(f))));
+  return !read.some(hit);
+}
+
 export function scoreCandidate(query: TitleQuery, c: BookInfo): number {
   if (contradictsTitle(query.title, c.title)) return 0;
   const authorNames = query.author ? [query.author, ...c.authors] : c.authors;
@@ -134,7 +181,11 @@ export function scoreCandidate(query: TitleQuery, c: BookInfo): number {
   const mainWords = [...tokens(main)].filter((w) => !names.has(w));
   const contained = mainWords.length >= 2 && wordCoverage(mainWords, readWords.join(" ")) === 1;
   if (!authorOk && !contained && readWords.length > 1 && wordCoverage(readWords, c.title) < 2 / 3) return 0;
+  // Auteur lu différent : on n'accepte que le titre exact (l'auteur a pu être mal lu, mais un titre approchant
+  // d'un autre auteur est un autre livre).
+  if (titleScore < 1 && authorContradicts(query.author, c)) return 0;
   let score = titleScore;
+  if (isOnDemandEdition(c) || isDerivedEdition(query.title, c.title)) score -= ODD_EDITION_PENALTY;
   if (authorScore !== null) score = score * 0.75 + authorScore * 0.25;
   if (sameEditor) score += 0.1;
   if (c.isbn13) score += 0.02; // léger bonus si on a un ISBN exploitable
@@ -531,6 +582,6 @@ function oneWordTitle(query: TitleQuery): boolean {
 }
 
 export function lookupCacheKey(title: string, author: string | null | undefined, language: string, publisher?: string | null): string {
-  // "v11" : on oublie les livres « corrigés » par Gemini qui ne gardaient pas assez de mots de la tranche.
-  return `v11|${language}|${normalizeText(title)}|${normalizeText(author ?? "")}|${normalizeText(publisher ?? "")}`;
+  // "v12" : on oublie les éditions à la demande, adaptations et livres d'un autre auteur retenus avant.
+  return `v12|${language}|${normalizeText(title)}|${normalizeText(author ?? "")}|${normalizeText(publisher ?? "")}`;
 }
